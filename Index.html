@@ -1,0 +1,1781 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Text Expansion Manager</title>
+  <style>
+    /* ========================================================================
+       GLOBAL STYLES
+       ======================================================================== */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      color: #202124;
+      background: #f8f9fa;
+      padding: 16px;
+      overflow-x: hidden;
+    }
+
+    /* ========================================================================
+       HEADER
+       ======================================================================== */
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .header h1 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .header-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 13px;
+      opacity: 0.95;
+    }
+
+    .user-email {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .user-email::before {
+      content: '👤';
+      font-size: 16px;
+    }
+
+    .version-badge {
+      background: rgba(255, 255, 255, 0.2);
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    /* ========================================================================
+       STATUS BAR
+       ======================================================================== */
+    .status-bar {
+      background: white;
+      padding: 12px 20px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .status-text {
+      font-size: 13px;
+      color: #5f6368;
+      font-weight: 500;
+    }
+
+    .status-text.loading {
+      color: #1a73e8;
+    }
+
+    .status-text.error {
+      color: #d93025;
+    }
+
+    .status-text.success {
+      color: #1e8e3e;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* ========================================================================
+       BUTTONS
+       ======================================================================== */
+    button {
+      background: #1a73e8;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      outline: none;
+    }
+
+    button:hover {
+      background: #1557b0;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    button:disabled {
+      background: #dadce0;
+      color: #80868b;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    button.btn-secondary {
+      background: #5f6368;
+    }
+
+    button.btn-secondary:hover {
+      background: #3c4043;
+    }
+
+    button.btn-danger {
+      background: #d93025;
+    }
+
+    button.btn-danger:hover {
+      background: #a50e0e;
+    }
+
+    button.btn-success {
+      background: #1e8e3e;
+    }
+
+    button.btn-success:hover {
+      background: #137333;
+    }
+
+    button.btn-small {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
+    /* ========================================================================
+       TABS
+       ======================================================================== */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 16px;
+      background: white;
+      padding: 4px;
+      border-radius: 6px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .tab {
+      flex: 1;
+      padding: 10px 16px;
+      background: transparent;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      color: #5f6368;
+      transition: all 0.2s;
+    }
+
+    .tab:hover {
+      background: #f1f3f4;
+      color: #202124;
+    }
+
+    .tab.active {
+      background: #1a73e8;
+      color: white;
+      box-shadow: 0 1px 3px rgba(26, 115, 232, 0.3);
+    }
+
+    /* ========================================================================
+       TAB CONTENT
+       ======================================================================== */
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* ========================================================================
+       SEARCH & FILTER
+       ======================================================================== */
+    .search-filter {
+      background: white;
+      padding: 16px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .search-box {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .search-input {
+      flex: 1;
+      padding: 10px 12px;
+      border: 1px solid #dadce0;
+      border-radius: 4px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .search-input:focus {
+      border-color: #1a73e8;
+      box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.1);
+    }
+
+    .filter-chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      padding: 6px 12px;
+      background: #e8f0fe;
+      color: #1a73e8;
+      border-radius: 16px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: 1px solid transparent;
+    }
+
+    .chip:hover {
+      background: #d2e3fc;
+    }
+
+    .chip.active {
+      background: #1a73e8;
+      color: white;
+    }
+
+    /* ========================================================================
+       SHORTCUTS GRID
+       ======================================================================== */
+    .shortcuts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .shortcut-card {
+      background: white;
+      border: 1px solid #dadce0;
+      border-radius: 8px;
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .shortcut-card:hover {
+      border-color: #1a73e8;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      transform: translateY(-2px);
+    }
+
+    .shortcut-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+
+    .shortcut-key {
+      font-size: 16px;
+      font-weight: 600;
+      color: #202124;
+      word-break: break-word;
+      flex: 1;
+      margin-right: 8px;
+    }
+
+    .shortcut-actions {
+      display: flex;
+      gap: 4px;
+    }
+
+    .icon-btn {
+      background: transparent;
+      color: #5f6368;
+      padding: 6px;
+      border-radius: 50%;
+      font-size: 18px;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+    }
+
+    .icon-btn:hover {
+      background: #f1f3f4;
+      color: #202124;
+      transform: none;
+    }
+
+    .icon-btn.favorite {
+      color: #5f6368;
+    }
+
+    .icon-btn.favorite.active {
+      color: #fbbc04;
+    }
+
+    .icon-btn.favorite:hover {
+      color: #fbbc04;
+    }
+
+    .shortcut-expansion {
+      color: #5f6368;
+      font-size: 13px;
+      margin-bottom: 12px;
+      max-height: 60px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .shortcut-meta {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    .meta-tag {
+      padding: 4px 8px;
+      background: #f1f3f4;
+      color: #5f6368;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .meta-tag.app {
+      background: #e8f0fe;
+      color: #1a73e8;
+    }
+
+    .meta-tag.lang {
+      background: #fce8e6;
+      color: #c5221f;
+    }
+
+    /* ========================================================================
+       EMPTY STATE
+       ======================================================================== */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #5f6368;
+    }
+
+    .empty-state-icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    .empty-state h3 {
+      font-size: 18px;
+      font-weight: 500;
+      margin-bottom: 8px;
+      color: #202124;
+    }
+
+    .empty-state p {
+      font-size: 14px;
+      margin-bottom: 20px;
+    }
+
+    /* ========================================================================
+       MODAL
+       ======================================================================== */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal {
+      background: white;
+      border-radius: 8px;
+      width: 100%;
+      max-width: 600px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+      animation: modalSlideIn 0.3s ease-out;
+    }
+
+    @keyframes modalSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .modal-header {
+      padding: 20px;
+      border-bottom: 1px solid #e8eaed;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header h2 {
+      font-size: 20px;
+      font-weight: 600;
+      color: #202124;
+    }
+
+    .modal-close {
+      background: transparent;
+      color: #5f6368;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 4px;
+      border: none;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-close:hover {
+      background: #f1f3f4;
+      color: #202124;
+    }
+
+    .modal-body {
+      padding: 20px;
+    }
+
+    .modal-footer {
+      padding: 16px 20px;
+      border-top: 1px solid #e8eaed;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    /* ========================================================================
+       FORM
+       ======================================================================== */
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 6px;
+      color: #202124;
+      font-size: 13px;
+    }
+
+    .form-label.required::after {
+      content: ' *';
+      color: #d93025;
+    }
+
+    .form-input,
+    .form-textarea,
+    .form-select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #dadce0;
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form-input:focus,
+    .form-textarea:focus,
+    .form-select:focus {
+      border-color: #1a73e8;
+      box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.1);
+    }
+
+    .form-textarea {
+      resize: vertical;
+      min-height: 100px;
+      font-family: 'Courier New', monospace;
+    }
+
+    .form-help {
+      font-size: 12px;
+      color: #5f6368;
+      margin-top: 4px;
+    }
+
+    .form-help.error {
+      color: #d93025;
+    }
+
+    /* ========================================================================
+       IMPORT SECTION
+       ======================================================================== */
+    .import-section {
+      background: white;
+      border-radius: 6px;
+      padding: 20px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .import-mode-selector {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .mode-option {
+      flex: 1;
+      padding: 16px;
+      border: 2px solid #dadce0;
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.2s;
+    }
+
+    .mode-option:hover {
+      border-color: #1a73e8;
+      background: #f8f9fa;
+    }
+
+    .mode-option.active {
+      border-color: #1a73e8;
+      background: #e8f0fe;
+    }
+
+    .mode-option-title {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 4px;
+      color: #202124;
+    }
+
+    .mode-option-desc {
+      font-size: 12px;
+      color: #5f6368;
+    }
+
+    .import-textarea {
+      width: 100%;
+      min-height: 200px;
+      padding: 12px;
+      border: 1px solid #dadce0;
+      border-radius: 4px;
+      font-size: 13px;
+      font-family: 'Courier New', monospace;
+      resize: vertical;
+      outline: none;
+      margin-bottom: 16px;
+    }
+
+    .import-textarea:focus {
+      border-color: #1a73e8;
+      box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.1);
+    }
+
+    .import-options {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .import-result {
+      margin-top: 16px;
+      padding: 12px;
+      border-radius: 4px;
+      font-size: 13px;
+      display: none;
+    }
+
+    .import-result.success {
+      display: block;
+      background: #e6f4ea;
+      color: #137333;
+      border: 1px solid #1e8e3e;
+    }
+
+    .import-result.error {
+      display: block;
+      background: #fce8e6;
+      color: #a50e0e;
+      border: 1px solid #d93025;
+    }
+
+    /* ========================================================================
+       TOAST NOTIFICATIONS
+       ======================================================================== */
+    .toast-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-width: 400px;
+    }
+
+    .toast {
+      background: white;
+      padding: 12px 16px;
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      animation: toastSlideIn 0.3s ease-out;
+      border-left: 4px solid #1a73e8;
+    }
+
+    @keyframes toastSlideIn {
+      from {
+        opacity: 0;
+        transform: translateX(100%);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    .toast.good {
+      border-left-color: #1e8e3e;
+    }
+
+    .toast.warn {
+      border-left-color: #fbbc04;
+    }
+
+    .toast.bad {
+      border-left-color: #d93025;
+    }
+
+    .toast-icon {
+      font-size: 20px;
+    }
+
+    .toast-message {
+      flex: 1;
+      font-size: 13px;
+      color: #202124;
+    }
+
+    /* ========================================================================
+       LOADING SPINNER
+       ======================================================================== */
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ========================================================================
+       RESPONSIVE DESIGN
+       ======================================================================== */
+    @media (max-width: 768px) {
+      body {
+        padding: 8px;
+      }
+
+      .header {
+        padding: 16px;
+      }
+
+      .header h1 {
+        font-size: 20px;
+      }
+
+      .shortcuts-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .import-options {
+        grid-template-columns: 1fr;
+      }
+
+      .toast-container {
+        left: 10px;
+        right: 10px;
+        max-width: none;
+      }
+    }
+
+    /* ========================================================================
+       UTILITY CLASSES
+       ======================================================================== */
+    .hidden {
+      display: none !important;
+    }
+
+    .text-center {
+      text-align: center;
+    }
+
+    .mb-0 { margin-bottom: 0 !important; }
+    .mb-1 { margin-bottom: 8px !important; }
+    .mb-2 { margin-bottom: 16px !important; }
+    .mb-3 { margin-bottom: 24px !important; }
+
+    .mt-0 { margin-top: 0 !important; }
+    .mt-1 { margin-top: 8px !important; }
+    .mt-2 { margin-top: 16px !important; }
+    .mt-3 { margin-top: 24px !important; }
+  </style>
+</head>
+<body>
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Header -->
+  <div class="header">
+    <h1>📝 Text Expansion Manager</h1>
+    <div class="header-info">
+      <div class="user-email" id="userEmail">Loading...</div>
+      <div class="version-badge" id="versionBadge">v1.0</div>
+    </div>
+  </div>
+
+  <!-- Status Bar -->
+  <div class="status-bar">
+    <div class="status-text" id="statusText">Loading application...</div>
+    <div class="action-buttons">
+      <button id="btnRefresh" onclick="refreshData(true)">
+        🔄 Refresh
+      </button>
+      <button id="btnNew" onclick="openNewShortcutModal()">
+        ➕ New / Edit
+      </button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" id="tabAll" onclick="switchTab('all')">
+      📋 All Shortcuts
+    </button>
+    <button class="tab" id="tabFav" onclick="switchTab('fav')">
+      ⭐ My Favorites
+    </button>
+    <button class="tab" id="tabImport" onclick="switchTab('import')">
+      📥 Import
+    </button>
+  </div>
+
+  <!-- Tab Content: All Shortcuts -->
+  <div class="tab-content active" id="contentAll">
+    <!-- Search & Filter -->
+    <div class="search-filter">
+      <div class="search-box">
+        <input 
+          type="text" 
+          class="search-input" 
+          id="searchInput" 
+          placeholder="🔍 Search shortcuts by name, content, or tags..."
+          oninput="handleSearch()">
+        <button onclick="clearSearch()">Clear</button>
+      </div>
+      <div class="filter-chips">
+        <div class="chip active" data-filter="all" onclick="handleFilterClick(this, 'all')">
+          All
+        </div>
+        <div class="chip" data-filter="favorites" onclick="handleFilterClick(this, 'favorites')">
+          ⭐ Favorites
+        </div>
+      </div>
+    </div>
+
+    <!-- Shortcuts Grid -->
+    <div class="shortcuts-grid" id="shortcutsGrid">
+      <!-- Cards will be dynamically inserted here -->
+    </div>
+
+    <!-- Empty State -->
+    <div class="empty-state hidden" id="emptyStateAll">
+      <div class="empty-state-icon">📝</div>
+      <h3>No shortcuts yet</h3>
+      <p>Create your first text expansion shortcut to get started!</p>
+      <button onclick="openNewShortcutModal()">➕ Create First Shortcut</button>
+    </div>
+  </div>
+
+  <!-- Tab Content: Favorites -->
+  <div class="tab-content" id="contentFav">
+    <div class="shortcuts-grid" id="favoritesGrid">
+      <!-- Favorite cards will be dynamically inserted here -->
+    </div>
+
+    <div class="empty-state hidden" id="emptyStateFav">
+      <div class="empty-state-icon">⭐</div>
+      <h3>No favorites yet</h3>
+      <p>Star your frequently used shortcuts to add them to favorites!</p>
+    </div>
+  </div>
+
+  <!-- Tab Content: Import -->
+  <div class="tab-content" id="contentImport">
+    <div class="import-section">
+      <h2 class="mb-2">📥 Bulk Import Shortcuts</h2>
+      <p class="form-help mb-3">
+        Import multiple shortcuts at once using CSV or JSON format. 
+        Existing shortcuts with matching names will be updated.
+      </p>
+
+      <!-- Import Mode Selector -->
+      <div class="import-mode-selector">
+        <div class="mode-option active" data-mode="csv" onclick="selectImportMode('csv')">
+          <div class="mode-option-title">📊 CSV Format</div>
+          <div class="mode-option-desc">Comma-separated values</div>
+        </div>
+        <div class="mode-option" data-mode="json" onclick="selectImportMode('json')">
+          <div class="mode-option-title">🔧 JSON Format</div>
+          <div class="mode-option-desc">JavaScript Object Notation</div>
+        </div>
+      </div>
+
+      <!-- Import Options -->
+      <div class="import-options">
+        <div class="form-group mb-0">
+          <label class="form-label">Default Application</label>
+          <input 
+            type="text" 
+            id="defaultApplication" 
+            class="form-input" 
+            placeholder="e.g., General, Email, Code">
+        </div>
+        <div class="form-group mb-0">
+          <label class="form-label">Default Language</label>
+          <input 
+            type="text" 
+            id="defaultLanguage" 
+            class="form-input" 
+            placeholder="e.g., en, es, fr">
+        </div>
+      </div>
+
+      <!-- Import Textarea -->
+      <div class="form-group">
+        <label class="form-label">Paste CSV or JSON content:</label>
+        <textarea 
+          id="importText" 
+          class="import-textarea" 
+          placeholder="Paste your CSV or JSON data here..."></textarea>
+        <div class="form-help" id="importMeta">
+          CSV Format: Snippet Name,Content,Application,Description,Language,Tags
+        </div>
+      </div>
+
+      <!-- Import Actions -->
+      <div style="display: flex; gap: 8px;">
+        <button id="btnImport" onclick="runImport()">
+          📥 Import Shortcuts
+        </button>
+        <button class="btn-secondary" onclick="clearImportForm()">
+          Clear
+        </button>
+        <button class="btn-secondary" onclick="showImportHelp()">
+          ❓ Help
+        </button>
+      </div>
+
+      <!-- Import Result -->
+      <div id="importResult" class="import-result"></div>
+    </div>
+  </div>
+
+  <!-- Modal: Edit/Create Shortcut -->
+  <div class="modal-overlay" id="modalOverlay" onclick="handleModalOverlayClick(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h2 id="modalTitle">New Shortcut</h2>
+        <button class="modal-close" onclick="showModal(false)">×</button>
+      </div>
+      <div class="modal-body">
+        <form id="shortcutForm" onsubmit="event.preventDefault(); saveShortcut();">
+          <div class="form-group">
+            <label class="form-label required">Snippet Name</label>
+            <input 
+              type="text" 
+              id="fKey" 
+              class="form-input" 
+              placeholder="e.g., addr, sig, meeting-template"
+              required>
+            <div class="form-help">
+              Unique identifier for this shortcut (max 80 characters)
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label required">Content</label>
+            <textarea 
+              id="fExpansion" 
+              class="form-textarea" 
+              placeholder="Enter the text that will expand when you use this shortcut..."
+              required></textarea>
+            <div class="form-help">
+              The text that will be inserted (max 50,000 characters)
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Application</label>
+            <input 
+              type="text" 
+              id="fApplication" 
+              class="form-input" 
+              placeholder="e.g., Email, Slack, Google Docs">
+            <div class="form-help">
+              Where this shortcut is typically used
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Description</label>
+            <textarea 
+              id="fDescription" 
+              class="form-textarea" 
+              style="min-height: 80px;"
+              placeholder="Optional description of what this shortcut does..."></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Language</label>
+            <input 
+              type="text" 
+              id="fLanguage" 
+              class="form-input" 
+              placeholder="e.g., en, es, fr, code">
+          </div>
+
+          <div class="form-group mb-0">
+            <label class="form-label">Tags</label>
+            <input 
+              type="text" 
+              id="fTags" 
+              class="form-input" 
+              placeholder="e.g., work, personal, email, signature">
+            <div class="form-help">
+              Comma-separated tags for organization
+            </div>
+          </div>
+
+          <div class="form-help error" id="formHelp"></div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-danger" id="btnDelete" onclick="deleteSelectedShortcut()">
+          🗑️ Delete
+        </button>
+        <button class="btn-secondary" onclick="showModal(false)">
+          Cancel
+        </button>
+        <button id="btnSave" onclick="saveShortcut()">
+          💾 Save
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript -->
+  <script>
+    // ========================================================================
+    // GLOBAL STATE
+    // ========================================================================
+    const state = {
+      loaded: false,
+      userEmail: '',
+      shortcuts: [],
+      favorites: [],
+      version: '',
+      tab: 'all',
+      searchQuery: '',
+      filterMode: 'all',
+      editingKey: null,
+      importMode: 'csv'
+    };
+
+    // ========================================================================
+    // INITIALIZATION
+    // ========================================================================
+    window.onload = function() {
+      initializeApp();
+    };
+
+    function initializeApp() {
+      setBusy('Loading shortcuts...');
+      google.script.run
+        .withSuccessHandler(handleBootstrapSuccess)
+        .withFailureHandler(handleBootstrapFailure)
+        .getAppBootstrapData();
+    }
+
+    function handleBootstrapSuccess(data) {
+      state.loaded = true;
+      if (!data || !data.ok) {
+        toast('Failed to load data.', 'bad');
+        setReady('Load failed');
+        return;
+      }
+
+      state.userEmail = data.userEmail || '';
+      state.shortcuts = Array.isArray(data.shortcuts) ? data.shortcuts : [];
+      state.favorites = Array.isArray(data.favorites) ? data.favorites : [];
+      state.version = data.version || '';
+
+      el('userEmail').textContent = state.userEmail || 'Not signed in';
+      el('versionBadge').textContent = `v${state.version}`;
+
+      setReady(`${state.shortcuts.length} shortcuts loaded`);
+      render();
+    }
+
+    function handleBootstrapFailure(err) {
+      state.loaded = true;
+      setReady('Load failed');
+      toast(err && err.message ? err.message : 'Failed to load data.', 'bad');
+      render();
+    }
+
+    // ========================================================================
+    // UI HELPERS
+    // ========================================================================
+    function el(id) {
+      return document.getElementById(id);
+    }
+
+    function setBusy(msg) {
+      const statusEl = el('statusText');
+      statusEl.textContent = msg;
+      statusEl.className = 'status-text loading';
+    }
+
+    function setReady(msg) {
+      const statusEl = el('statusText');
+      statusEl.textContent = msg;
+      statusEl.className = 'status-text success';
+    }
+
+    function setError(msg) {
+      const statusEl = el('statusText');
+      statusEl.textContent = msg;
+      statusEl.className = 'status-text error';
+    }
+
+    function toast(message, type) {
+      const container = el('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type || 'good'}`;
+      
+      const icons = {
+        good: '✅',
+        warn: '⚠️',
+        bad: '❌'
+      };
+      
+      toast.innerHTML = `
+        <div class="toast-icon">${icons[type] || '💬'}</div>
+        <div class="toast-message">${escapeHtml(message)}</div>
+      `;
+      
+      container.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(100%)';
+        setTimeout(() => container.removeChild(toast), 300);
+      }, 4000);
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // ========================================================================
+    // RENDERING
+    // ========================================================================
+    function render() {
+      renderShortcutsGrid();
+      renderFavoritesGrid();
+      updateEmptyStates();
+    }
+
+    function renderShortcutsGrid() {
+      const grid = el('shortcutsGrid');
+      const filtered = getFilteredShortcuts();
+      
+      if (filtered.length === 0) {
+        grid.innerHTML = '';
+        return;
+      }
+
+      grid.innerHTML = filtered.map(s => createShortcutCard(s)).join('');
+    }
+
+    function renderFavoritesGrid() {
+      const grid = el('favoritesGrid');
+      const favorites = state.shortcuts.filter(s => s.favorite);
+      
+      if (favorites.length === 0) {
+        grid.innerHTML = '';
+        return;
+      }
+
+      grid.innerHTML = favorites.map(s => createShortcutCard(s)).join('');
+    }
+
+    function createShortcutCard(shortcut) {
+      // Safely escape and encode for HTML attributes
+      const keyEncoded = encodeURIComponent(shortcut.key);
+      const keyHtml = escapeHtml(shortcut.key);
+      const expansionHtml = escapeHtml(shortcut.expansion);
+      const applicationHtml = escapeHtml(shortcut.application || '');
+      const languageHtml = escapeHtml(shortcut.language || '');
+      const favoriteClass = shortcut.favorite ? 'active' : '';
+      
+      return `
+        <div class="shortcut-card" onclick="editShortcut(decodeURIComponent('${keyEncoded}'))">
+          <div class="shortcut-card-header">
+            <div class="shortcut-key">${keyHtml}</div>
+            <div class="shortcut-actions">
+              <button class="icon-btn favorite ${favoriteClass}" 
+                      onclick="toggleFavoriteHandler(event, decodeURIComponent('${keyEncoded}'), ${!shortcut.favorite})"
+                      title="${shortcut.favorite ? 'Remove from favorites' : 'Add to favorites'}">
+                ${shortcut.favorite ? '★' : '☆'}
+              </button>
+              <button class="icon-btn" 
+                      onclick="copyToClipboardHandler(event, decodeURIComponent('${keyEncoded}'))"
+                      title="Copy content">
+                📋
+              </button>
+            </div>
+          </div>
+          <div class="shortcut-expansion">${expansionHtml}</div>
+          <div class="shortcut-meta">
+            ${applicationHtml ? `<span class="meta-tag app">${applicationHtml}</span>` : ''}
+            ${languageHtml ? `<span class="meta-tag lang">${languageHtml}</span>` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    function updateEmptyStates() {
+      const allEmpty = el('emptyStateAll');
+      const favEmpty = el('emptyStateFav');
+      const filtered = getFilteredShortcuts();
+      const favorites = state.shortcuts.filter(s => s.favorite);
+
+      if (filtered.length === 0) {
+        allEmpty.classList.remove('hidden');
+      } else {
+        allEmpty.classList.add('hidden');
+      }
+
+      if (favorites.length === 0) {
+        favEmpty.classList.remove('hidden');
+      } else {
+        favEmpty.classList.add('hidden');
+      }
+    }
+
+    function getFilteredShortcuts() {
+      let filtered = state.shortcuts;
+
+      // Apply search filter
+      if (state.searchQuery) {
+        const query = state.searchQuery.toLowerCase();
+        filtered = filtered.filter(s => 
+          s.key.toLowerCase().includes(query) ||
+          s.expansion.toLowerCase().includes(query) ||
+          (s.tags && s.tags.toLowerCase().includes(query)) ||
+          (s.application && s.application.toLowerCase().includes(query))
+        );
+      }
+
+      // Apply chip filter
+      if (state.filterMode === 'favorites') {
+        filtered = filtered.filter(s => s.favorite);
+      }
+
+      return filtered;
+    }
+
+    // ========================================================================
+    // TAB SWITCHING
+    // ========================================================================
+    function switchTab(name) {
+      state.tab = name;
+
+      el('tabAll').classList.toggle('active', name === 'all');
+      el('tabFav').classList.toggle('active', name === 'fav');
+      el('tabImport').classList.toggle('active', name === 'import');
+
+      el('contentAll').classList.toggle('active', name === 'all');
+      el('contentFav').classList.toggle('active', name === 'fav');
+      el('contentImport').classList.toggle('active', name === 'import');
+
+      if (name !== 'import') {
+        render();
+      }
+    }
+
+    // ========================================================================
+    // SEARCH & FILTER
+    // ========================================================================
+    function handleSearch() {
+      state.searchQuery = el('searchInput').value;
+      render();
+    }
+
+    function clearSearch() {
+      el('searchInput').value = '';
+      state.searchQuery = '';
+      render();
+    }
+
+    function handleFilterClick(chip, filter) {
+      state.filterMode = filter;
+      
+      document.querySelectorAll('.filter-chips .chip').forEach(c => {
+        c.classList.remove('active');
+      });
+      chip.classList.add('active');
+      
+      render();
+    }
+
+    // ========================================================================
+    // MODAL MANAGEMENT
+    // ========================================================================
+    function showModal(show) {
+      el('modalOverlay').classList.toggle('active', show);
+      if (!show) {
+        clearForm();
+      }
+    }
+
+    function handleModalOverlayClick(event) {
+      if (event.target === el('modalOverlay')) {
+        showModal(false);
+      }
+    }
+
+    function openNewShortcutModal() {
+      state.editingKey = null;
+      el('modalTitle').textContent = 'New Shortcut';
+      el('btnDelete').style.display = 'none';
+      clearForm();
+      showModal(true);
+      el('fKey').focus();
+    }
+
+    function editShortcut(key) {
+      const shortcut = state.shortcuts.find(s => s.key === key);
+      if (!shortcut) {
+        toast('Shortcut not found.', 'bad');
+        return;
+      }
+
+      state.editingKey = key;
+      el('modalTitle').textContent = 'Edit Shortcut';
+      el('btnDelete').style.display = 'inline-flex';
+
+      el('fKey').value = shortcut.key;
+      el('fExpansion').value = shortcut.expansion;
+      el('fApplication').value = shortcut.application || '';
+      el('fDescription').value = shortcut.description || '';
+      el('fLanguage').value = shortcut.language || '';
+      el('fTags').value = shortcut.tags || '';
+      el('formHelp').textContent = '';
+
+      showModal(true);
+      el('fKey').focus();
+    }
+
+    function clearForm() {
+      el('fKey').value = '';
+      el('fExpansion').value = '';
+      el('fApplication').value = '';
+      el('fDescription').value = '';
+      el('fLanguage').value = '';
+      el('fTags').value = '';
+      el('formHelp').textContent = '';
+    }
+
+    // ========================================================================
+    // SHORTCUT CRUD
+    // ========================================================================
+    function saveShortcut() {
+      const payload = {
+        key: el('fKey').value.trim(),
+        expansion: el('fExpansion').value,
+        application: el('fApplication').value.trim(),
+        description: el('fDescription').value.trim(),
+        language: el('fLanguage').value.trim(),
+        tags: el('fTags').value.trim()
+      };
+
+      // Client-side validation
+      const v = validatePayload(payload);
+      if (!v.ok) {
+        el('formHelp').textContent = v.message;
+        toast(v.message, 'warn');
+        return;
+      }
+
+      el('btnSave').disabled = true;
+      el('btnDelete').disabled = true;
+      el('formHelp').textContent = 'Saving…';
+
+      google.script.run
+        .withSuccessHandler((res) => {
+          el('btnSave').disabled = false;
+          el('btnDelete').disabled = false;
+
+          if (!res || !res.ok) {
+            const msg = res && res.message ? res.message : 'Save failed.';
+            el('formHelp').textContent = msg;
+            toast(msg, 'bad');
+            return;
+          }
+
+          toast(res.message || 'Saved.', 'good');
+          showModal(false);
+          refreshData(true);
+        })
+        .withFailureHandler((err) => {
+          el('btnSave').disabled = false;
+          el('btnDelete').disabled = false;
+          const msg = err && err.message ? err.message : 'Save failed.';
+          el('formHelp').textContent = msg;
+          toast(msg, 'bad');
+        })
+        .upsertShortcut(payload);
+    }
+
+    function deleteSelectedShortcut() {
+      const key = String(el('fKey').value || '').trim();
+      if (!key) {
+        toast('Missing Snippet Name.', 'warn');
+        return;
+      }
+      const ok = confirm(`Delete "${key}"?`);
+      if (!ok) return;
+
+      el('btnSave').disabled = true;
+      el('btnDelete').disabled = true;
+      el('formHelp').textContent = 'Deleting…';
+
+      google.script.run
+        .withSuccessHandler((res) => {
+          el('btnSave').disabled = false;
+          el('btnDelete').disabled = false;
+
+          if (!res || !res.ok) {
+            toast(res && res.message ? res.message : 'Delete failed.', 'bad');
+            el('formHelp').textContent = res && res.message ? res.message : 'Delete failed.';
+            return;
+          }
+
+          toast(res.message || 'Deleted.', 'good');
+          showModal(false);
+          refreshData(true);
+        })
+        .withFailureHandler((err) => {
+          el('btnSave').disabled = false;
+          el('btnDelete').disabled = false;
+          toast(err && err.message ? err.message : 'Delete failed.', 'bad');
+          el('formHelp').textContent = err && err.message ? err.message : 'Delete failed.';
+        })
+        .deleteShortcut(key);
+    }
+
+    function validatePayload(payload) {
+      if (!payload.key) return { ok: false, message: 'Snippet Name is required.' };
+      if (payload.key.length > 80) return { ok: false, message: 'Snippet Name too long (max 80).' };
+      if (!payload.expansion) return { ok: false, message: 'Content is required.' };
+      if (payload.expansion.length > 50000) return { ok: false, message: 'Content too long (max 50,000).' };
+      return { ok: true };
+    }
+
+    // ========================================================================
+    // FAVORITES - FIXED WITH EVENT HANDLERS
+    // ========================================================================
+    
+    /**
+     * 🔥 FIX #1: Star button handler with event.stopPropagation()
+     * This prevents the card click event from firing when clicking the star
+     */
+    function toggleFavoriteHandler(event, key, shouldFavorite) {
+      // CRITICAL: Stop event from bubbling to card click handler
+      event.stopPropagation();
+      event.preventDefault();
+      
+      if (!key) {
+        toast('Invalid shortcut key.', 'bad');
+        return;
+      }
+
+      // Disable button to prevent double-clicks
+      const btn = event.currentTarget;
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '⏳';
+
+      console.log(`Toggle favorite: ${key} to ${shouldFavorite}`);
+
+      google.script.run
+        .withSuccessHandler((res) => {
+          console.log('Favorite result:', res);
+          btn.disabled = false;
+          
+          if (!res || !res.ok) {
+            btn.innerHTML = originalHtml;
+            toast(res && res.message ? res.message : 'Favorite update failed.', 'bad');
+            return;
+          }
+
+          // Update local state immediately for instant UI feedback
+          const shortcut = state.shortcuts.find(s => s.key === key);
+          if (shortcut) {
+            shortcut.favorite = shouldFavorite;
+          }
+
+          toast(res.message || 'Favorites updated.', 'good');
+          
+          // Full refresh to sync with backend
+          refreshData(false);
+        })
+        .withFailureHandler((err) => {
+          console.error('Favorite error:', err);
+          btn.disabled = false;
+          btn.innerHTML = originalHtml;
+          toast(err && err.message ? err.message : 'Favorite update failed.', 'bad');
+        })
+        .setFavorite(key, shouldFavorite);
+    }
+
+    // ========================================================================
+    // COPY TO CLIPBOARD - FIXED WITH PROPER HANDLER
+    // ========================================================================
+    
+    /**
+     * 🔥 FIX #2: Copy to clipboard with event.stopPropagation() and proper clipboard API
+     * Uses modern Clipboard API with fallback to execCommand
+     */
+    function copyToClipboardHandler(event, key) {
+      // CRITICAL: Stop event from bubbling to card click handler
+      event.stopPropagation();
+      event.preventDefault();
+      
+      const shortcut = state.shortcuts.find(s => s.key === key);
+      if (!shortcut) {
+        toast('Shortcut not found.', 'bad');
+        return;
+      }
+
+      const textToCopy = shortcut.expansion;
+      
+      // Visual feedback
+      const btn = event.currentTarget;
+      const originalHtml = btn.innerHTML;
+      btn.innerHTML = '✅';
+
+      // Try modern Clipboard API first (requires HTTPS or localhost)
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(textToCopy)
+          .then(() => {
+            console.log(`Copied "${key}" to clipboard via Clipboard API`);
+            toast(`Copied "${key}" to clipboard! 📋`, 'good');
+            
+            // Log the copy action
+            google.script.run
+              .withSuccessHandler(() => console.log('Copy action logged'))
+              .withFailureHandler((err) => console.warn('Log failed:', err))
+              .logCopyAction(key);
+            
+            // Reset button icon
+            setTimeout(() => { btn.innerHTML = originalHtml; }, 1000);
+          })
+          .catch((err) => {
+            console.warn('Clipboard API failed, trying fallback:', err);
+            copyToClipboardFallback(textToCopy, key, btn, originalHtml);
+          });
+      } else {
+        // Fallback for older browsers
+        console.log('Clipboard API not available, using fallback');
+        copyToClipboardFallback(textToCopy, key, btn, originalHtml);
+      }
+    }
+
+    /**
+     * Fallback clipboard method using textarea + execCommand
+     */
+    function copyToClipboardFallback(text, key, btn, originalHtml) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.top = '0';
+      textarea.style.left = '0';
+      textarea.style.opacity = '0';
+      textarea.style.pointerEvents = 'none';
+      document.body.appendChild(textarea);
+      
+      try {
+        textarea.select();
+        textarea.setSelectionRange(0, 99999); // For mobile devices
+        
+        const successful = document.execCommand('copy');
+        
+        if (successful) {
+          console.log(`Copied "${key}" to clipboard via execCommand`);
+          toast(`Copied "${key}" to clipboard! 📋`, 'good');
+          
+          // Log the copy action
+          google.script.run
+            .withSuccessHandler(() => console.log('Copy action logged'))
+            .withFailureHandler((err) => console.warn('Log failed:', err))
+            .logCopyAction(key);
+        } else {
+          throw new Error('execCommand failed');
+        }
+      } catch (err) {
+        console.error('Copy failed:', err);
+        toast('Failed to copy. Please try manual selection.', 'bad');
+      } finally {
+        document.body.removeChild(textarea);
+        setTimeout(() => { btn.innerHTML = originalHtml; }, 1000);
+      }
+    }
+
+    // ========================================================================
+    // REFRESH DATA
+    // ========================================================================
+    function refreshData(showToast) {
+      setBusy('Refreshing…');
+      google.script.run
+        .withSuccessHandler((data) => {
+          state.loaded = true;
+          if (!data || !data.ok) {
+            toast('Failed to load data.', 'bad');
+            setReady('Load failed');
+            return;
+          }
+
+          state.userEmail = data.userEmail || '';
+          state.shortcuts = Array.isArray(data.shortcuts) ? data.shortcuts : [];
+          state.favorites = Array.isArray(data.favorites) ? data.favorites : [];
+          state.version = data.version || '';
+          
+          if (showToast) toast('Data refreshed.', 'good');
+          setReady(`${state.shortcuts.length} shortcuts loaded`);
+          render();
+        })
+        .withFailureHandler((err) => {
+          state.loaded = true;
+          setReady('Load failed');
+          toast(err && err.message ? err.message : 'Failed to load data.', 'bad');
+          render();
+        })
+        .getAppBootstrapData();
+    }
+
+    // ========================================================================
+    // IMPORT
+    // ========================================================================
+    function selectImportMode(mode) {
+      state.importMode = mode;
+      
+      document.querySelectorAll('.mode-option').forEach(opt => {
+        opt.classList.remove('active');
+      });
+      document.querySelector(`.mode-option[data-mode="${mode}"]`).classList.add('active');
+      
+      updateImportMeta();
+    }
+
+    function updateImportMeta() {
+      const metaEl = el('importMeta');
+      if (state.importMode === 'csv') {
+        metaEl.textContent = 'CSV Format: Snippet Name,Content,Application,Description,Language,Tags';
+      } else {
+        metaEl.textContent = 'JSON Format: Array of objects with keys: key, expansion, application, description, language, tags';
+      }
+    }
+
+    function clearImportForm() {
+      el('importText').value = '';
+      el('defaultApplication').value = '';
+      el('defaultLanguage').value = '';
+      el('importResult').style.display = 'none';
+      el('importResult').textContent = '';
+    }
+
+    function showImportHelp() {
+      const csvExample = `Snippet Name,Content,Application,Description,Language,Tags
+addr,"123 Main St\nCity, State 12345",Email,My address,en,contact
+sig,"Best regards,\nJohn Doe",Email,Email signature,en,signature`;
+
+      const jsonExample = `[
+  {
+    "key": "addr",
+    "expansion": "123 Main St\\nCity, State 12345",
+    "application": "Email",
+    "description": "My address",
+    "language": "en",
+    "tags": "contact"
+  },
+  {
+    "key": "sig",
+    "expansion": "Best regards,\\nJohn Doe",
+    "application": "Email",
+    "description": "Email signature",
+    "language": "en",
+    "tags": "signature"
+  }
+]`;
+
+      const example = state.importMode === 'csv' ? csvExample : jsonExample;
+      alert(`Import Help\n\n${state.importMode.toUpperCase()} Example:\n\n${example}\n\nNotes:\n- First column/key must be the snippet name\n- Required fields: Snippet Name, Content\n- Existing shortcuts will be updated\n- Default values will be used for missing optional fields`);
+    }
+
+    function runImport() {
+      const mode = state.importMode;
+      const text = el('importText').value;
+      const defaultApplication = el('defaultApplication').value;
+      const defaultLanguage = el('defaultLanguage').value;
+
+      if (!String(text || '').trim()) {
+        toast('Paste CSV or JSON content first.', 'warn');
+        return;
+      }
+
+      el('btnImport').disabled = true;
+      el('importMeta').textContent = 'Importing…';
+      el('importResult').textContent = '';
+      el('importResult').style.display = 'none';
+
+      google.script.run
+        .withSuccessHandler((res) => {
+          el('btnImport').disabled = false;
+          el('importMeta').textContent = 'Paste CSV or JSON';
+
+          if (!res || !res.ok) {
+            const msg = res && res.message ? res.message : 'Import failed.';
+            toast(msg, 'bad');
+            el('importResult').textContent = msg;
+            el('importResult').className = 'import-result error';
+            return;
+          }
+
+          toast(res.message || 'Import complete.', 'good');
+
+          const detail = [];
+          detail.push(res.message || 'Import complete.');
+          if (Array.isArray(res.errors) && res.errors.length) {
+            detail.push('Errors:');
+            for (const e of res.errors.slice(0, 50)) {
+              detail.push(`Row ${e.index}: ${e.key} — ${e.message}`);
+            }
+            if (res.errors.length > 50) {
+              detail.push(`... and ${res.errors.length - 50} more errors.`);
+            }
+          }
+          el('importResult').textContent = detail.join('\n');
+          el('importResult').className = 'import-result success';
+
+          refreshData(false);
+        })
+        .withFailureHandler((err) => {
+          el('btnImport').disabled = false;
+          el('importMeta').textContent = 'Paste CSV or JSON';
+          const msg = err && err.message ? err.message : 'Import failed.';
+          toast(msg, 'bad');
+          el('importResult').textContent = msg;
+          el('importResult').className = 'import-result error';
+        })
+        .bulkImport({ mode, text, defaultApplication, defaultLanguage });
+    }
+  </script>
+</body>
+</html>

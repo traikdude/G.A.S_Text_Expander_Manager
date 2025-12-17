@@ -1,0 +1,2 @@
+reports/*.md filter=lfs diff=lfs merge=lfs -text
+reports/*.txt filter=lfs diff=lfs merge=lfs -text
