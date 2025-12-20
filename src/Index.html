@@ -800,20 +800,46 @@
     .mt-1 { margin-top: 8px !important; }
     .mt-2 { margin-top: 16px !important; }
     .mt-3 { margin-top: 24px !important; }
+
+    /* * 🐛 FIX FOR FROZEN FIRST ITEM
+     * The fixed header (search bar/tabs) was covering the top of the list.
+     * We add padding to the top of the scroll container to push the content down.
+     */
+    .top-bar {
+      z-index: 1000;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: #f8f9fa;
+      padding: 16px 16px 0 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+
+    .main-content {
+      padding-top: 220px !important;
+      padding-bottom: 50px;
+    }
+
+    /* Adjust margins for fixed header components */
+    .top-bar .header { margin-bottom: 12px; }
+    .top-bar .status-bar { margin-bottom: 12px; }
+    .top-bar .tabs { margin-bottom: 0; }
   </style>
 </head>
 <body>
   <!-- Toast Container -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <!-- Header -->
-  <div class="header">
-    <h1>📝 Text Expansion Manager</h1>
-    <div class="header-info">
-      <div class="user-email" id="userEmail">Loading...</div>
-      <div class="version-badge" id="versionBadge">v1.0</div>
+  <div class="top-bar">
+    <!-- Header -->
+    <div class="header">
+      <h1>📝 Text Expansion Manager</h1>
+      <div class="header-info">
+        <div class="user-email" id="userEmail">Loading...</div>
+        <div class="version-badge" id="versionBadge">v1.0</div>
+      </div>
     </div>
-  </div>
 
   <!-- Status Bar -->
   <div class="status-bar">
@@ -840,7 +866,9 @@
       📥 Import
     </button>
   </div>
+</div>
 
+<div class="main-content">
   <!-- Tab Content: All Shortcuts -->
   <div class="tab-content active" id="contentAll">
     <!-- Search & Filter -->
@@ -961,6 +989,7 @@
       <div id="importResult" class="import-result"></div>
     </div>
   </div>
+</div>
 
   <!-- Modal: Edit/Create Shortcut -->
   <div class="modal-overlay" id="modalOverlay" onclick="handleModalOverlayClick(event)">
@@ -1097,7 +1126,10 @@
       }
 
       state.userEmail = data.userEmail || '';
-      state.shortcuts = Array.isArray(data.shortcuts) ? data.shortcuts : [];
+      // Apply normalization and deduplication patch
+      const rawShortcuts = Array.isArray(data.shortcuts) ? data.shortcuts : [];
+      state.shortcuts = normalizeDataset(rawShortcuts);
+      
       state.favorites = Array.isArray(data.favorites) ? data.favorites : [];
       state.version = data.version || '';
 
@@ -1106,6 +1138,29 @@
 
       setReady(`${state.shortcuts.length} shortcuts loaded`);
       render();
+    }
+
+    // --- DATASET NORMALIZATION & DEDUPLICATION PATCH ---
+    function normalizeDataset(data) {
+      const seen = new Set();
+      return data.map((item, index) => {
+        // Ensure item has a unique ID (if not provided, generate one)
+        // We use the key (Snippet Name) as the primary stable identifier logic
+        const id = item.id || `${item.key}-${index}`;
+        return { ...item, id: id };
+      }).filter(item => {
+        // Create a unique composite key to detect true duplicates
+        // Key + Expansion + Language (LanguageCategory)
+        const compositeKey = `${item.key}|${item.expansion}|${item.language || ''}`;
+        
+        if (seen.has(compositeKey)) {
+          console.warn(`Duplicate removed: ${item.key}`);
+          return false;
+        }
+        
+        seen.add(compositeKey);
+        return true;
+      });
     }
 
     function handleBootstrapFailure(err) {
@@ -1509,19 +1564,21 @@
           console.log('Favorite result:', res);
           btn.disabled = false;
           
-          if (!res || !res.ok) {
+          if (!res || !res.status) {
             btn.innerHTML = originalHtml;
-            toast(res && res.message ? res.message : 'Favorite update failed.', 'bad');
+            toast('Favorite update failed (invalid response).', 'bad');
             return;
           }
+
+          const isAdded = res.status === 'added';
 
           // Update local state immediately for instant UI feedback
           const shortcut = state.shortcuts.find(s => s.key === key);
           if (shortcut) {
-            shortcut.favorite = shouldFavorite;
+            shortcut.favorite = isAdded;
           }
 
-          toast(res.message || 'Favorites updated.', 'good');
+          toast(isAdded ? 'Added to favorites.' : 'Removed from favorites.', 'good');
           
           // Full refresh to sync with backend
           refreshData(false);
@@ -1532,7 +1589,7 @@
           btn.innerHTML = originalHtml;
           toast(err && err.message ? err.message : 'Favorite update failed.', 'bad');
         })
-        .setFavorite(key, shouldFavorite);
+        .toggleFavorite(key);
     }
 
     // ========================================================================
@@ -1568,11 +1625,19 @@
             console.log(`Copied "${key}" to clipboard via Clipboard API`);
             toast(`Copied "${key}" to clipboard! 📋`, 'good');
             
-            // Log the copy action
+            // Log the copy action AND auto-favorite
             google.script.run
-              .withSuccessHandler(() => console.log('Copy action logged'))
-              .withFailureHandler((err) => console.warn('Log failed:', err))
-              .logCopyAction(key);
+              .withSuccessHandler((res) => {
+                console.log('Copy/Favorite logged');
+                if (res && res.ok && res.favorite) {
+                  // Update local state if it became a favorite
+                  const s = state.shortcuts.find(item => item.key === key);
+                  if (s) s.favorite = true;
+                  render();
+                }
+              })
+              .withFailureHandler((err) => console.warn('Copy log failed:', err))
+              .handleClipboardFavorite(key);
             
             // Reset button icon
             setTimeout(() => { btn.innerHTML = originalHtml; }, 1000);
@@ -1611,11 +1676,18 @@
           console.log(`Copied "${key}" to clipboard via execCommand`);
           toast(`Copied "${key}" to clipboard! 📋`, 'good');
           
-          // Log the copy action
+          // Log the copy action AND auto-favorite
           google.script.run
-            .withSuccessHandler(() => console.log('Copy action logged'))
-            .withFailureHandler((err) => console.warn('Log failed:', err))
-            .logCopyAction(key);
+            .withSuccessHandler((res) => {
+              console.log('Copy/Favorite logged');
+              if (res && res.ok && res.favorite) {
+                const s = state.shortcuts.find(item => item.key === key);
+                if (s) s.favorite = true;
+                render();
+              }
+            })
+            .withFailureHandler((err) => console.warn('Copy log failed:', err))
+            .handleClipboardFavorite(key);
         } else {
           throw new Error('execCommand failed');
         }
@@ -1643,7 +1715,8 @@
           }
 
           state.userEmail = data.userEmail || '';
-          state.shortcuts = Array.isArray(data.shortcuts) ? data.shortcuts : [];
+          const rawShortcuts = Array.isArray(data.shortcuts) ? data.shortcuts : [];
+          state.shortcuts = normalizeDataset(rawShortcuts);
           state.favorites = Array.isArray(data.favorites) ? data.favorites : [];
           state.version = data.version || '';
           
