@@ -1,4 +1,4 @@
-# Google Apps Script: Text Expansion Manager 🧙🏾‍♂️✨
+# G.A.S_Text_Expander_Manager 🧙🏾‍♂️✨
 
 This project is a Google Apps Script (GAS) application designed for text expansion and management, developed with a local-first workflow using `clasp` and integrated with GitHub for version control.
 
