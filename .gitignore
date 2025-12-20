@@ -1,0 +1,9 @@
+# Google Apps Script credentials
+creds.json
+
+# Node modules
+node_modules/
+
+# OS generated files
+.DS_Store
+Thumbs.db
