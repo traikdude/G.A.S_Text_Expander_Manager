@@ -28,7 +28,7 @@ function listMyFavorites_() {
   const userEmail = getUserEmail_();
   if (!userEmail) return [];
 
-  const lock = LockService.getDocumentLock();
+  const lock = LockService.getScriptLock();
   lock.waitLock(10000);
 
   try {
@@ -106,7 +106,7 @@ function updateFavoriteStatus_(snippetName, options = { mode: 'toggle' }) {
   const sheet = ss.getSheetByName(CFG.SHEET_FAVORITES);
   
   // 🔒 Use DocumentLock to synchronize with all other users/processes
-  const lock = LockService.getDocumentLock();
+  const lock = LockService.getScriptLock();
   
   try {
     // Wait up to 10 seconds for the lock
@@ -261,7 +261,7 @@ function removeFavoriteForAllUsers_(key) {
  * @return {Object} Report { initialCount, removedCount, finalCount }
  */
 function cleanupDuplicateFavorites_() {
-  const lock = LockService.getDocumentLock();
+  const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   
   try {

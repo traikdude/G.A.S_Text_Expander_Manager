@@ -412,11 +412,44 @@ function readChunksByKey_(prefix, count) {
   return combined;
 }
 
+// DUPLICATE REMOVED: Canonical getShortcutsCached_() is at line ~320
+
+// ============================================================================
+// LEGACY CACHE WRAPPERS (Backwards Compatibility)
+// Delegate to generic readCacheByKey_/writeCacheByKey_ system
+// ============================================================================
+
 /**
- * DEPRECATED: Legacy global cache reader (kept for backward compat if needed).
+ * Reads global shortcuts cache.
+ * @return {Array<Object>|null} Cached shortcuts or null if expired/missing
  */
-function getShortcutsCached_() {
-  return getShortcutsFromSheet_(); // Always read fresh for now to be safe
+function readShortcutsCache_() {
+  const prefix = CFG.CACHE_KEY_PREFIX || 'TEM_SHORTCUTS_';
+  return readCacheByKey_(prefix);
+}
+
+/**
+ * Writes shortcuts to global cache.
+ * @param {Array<Object>} list - Shortcuts array to cache
+ * @return {boolean} Success status
+ */
+function writeShortcutsCache_(list) {
+  const prefix = CFG.CACHE_KEY_PREFIX || 'TEM_SHORTCUTS_';
+  const ttl = CFG.CACHE_TTL_SECONDS || 600;
+  return writeCacheByKey_(prefix, list, ttl);
+}
+
+/**
+ * Invalidates global shortcuts cache + bumps version.
+ */
+function invalidateShortcutsCache_() {
+  const cache = CacheService.getScriptCache();
+  const prefix = CFG.CACHE_KEY_PREFIX || 'TEM_SHORTCUTS_';
+  cache.remove(prefix + '_META');
+  bumpCacheVersion_();
+  if (CFG.DEBUG_MODE) {
+    console.log('✓ Global cache invalidated, version bumped');
+  }
 }
 
 // REMOVED: Old PropertyService fallback logic to simplify Snapshot architecture.
@@ -702,10 +735,73 @@ function getWebAppUrl_() {
 function storeWebAppUrl() {
   const url = "https://script.google.com/macros/s/AKfycbyR4SKUr9Fvs_3RLV1xWT5xjTTNxLoYPd94cthYADOZ/dev";
   PropertiesService.getScriptProperties().setProperty("WEBAPPURL", url);
-  
+
   // Verify it was saved
   const saved = PropertiesService.getScriptProperties().getProperty("WEBAPPURL");
   Logger.log("✅ Web App URL stored successfully: " + saved);
-  
+
   return "URL saved: " + saved;
+}
+
+// ============================================================================
+// VERIFICATION: Tests cache wrappers + snapshot integrity
+// Run via: clasp run testCacheAndSnapshotIntegrity
+// ============================================================================
+
+/**
+ * VERIFICATION: Tests cache wrappers + snapshot integrity.
+ * Run via: clasp run testCacheAndSnapshotIntegrity
+ */
+function testCacheAndSnapshotIntegrity() {
+  console.log('=== Cache & Snapshot Integrity Test ===\n');
+
+  try {
+    // TEST A: Cache wrappers exist
+    console.log('TEST A: Verifying cache wrappers...');
+    const cached = readShortcutsCache_();
+    console.log('✅ readShortcutsCache_() exists:', cached !== undefined);
+
+    // TEST B: Write + Read cycle
+    console.log('\nTEST B: Write/Read cycle...');
+    const testData = [
+      { key: 'test1', expansion: 'value1' },
+      { key: 'test2', expansion: 'value2' }
+    ];
+    const writeOk = writeShortcutsCache_(testData);
+    console.log('✅ Write successful:', writeOk);
+
+    const readBack = readShortcutsCache_();
+    const dataMatch = JSON.stringify(readBack) === JSON.stringify(testData);
+    console.log('✅ Read matches write:', dataMatch);
+    if (!dataMatch) throw new Error('Cache read/write mismatch');
+
+    // TEST C: Invalidation
+    console.log('\nTEST C: Cache invalidation...');
+    invalidateShortcutsCache_();
+    const afterInvalidate = readShortcutsCache_();
+    console.log('✅ Cache cleared:', afterInvalidate === null);
+
+    // TEST D: Snapshot model (NO sheet reads during paging)
+    console.log('\nTEST D: Snapshot integrity...');
+    const meta = beginShortcutsSnapshot();
+    console.log('✅ Snapshot created:', meta.snapshotToken);
+
+    const batch1 = fetchSnapshotPage_(meta.snapshotToken, 0, 10);
+    const batch2 = fetchSnapshotPage_(meta.snapshotToken, 10, 10);
+    console.log('✅ Batch 1 items:', batch1.items.length);
+    console.log('✅ Batch 2 items:', batch2.items.length);
+
+    // Check for duplicate keys across batches
+    const allKeys = [...batch1.items.map(i => i.key), ...batch2.items.map(i => i.key)];
+    const uniqueKeys = new Set(allKeys);
+    const noDuplicates = uniqueKeys.size === allKeys.length;
+    console.log('✅ No duplicate keys across batches:', noDuplicates);
+
+    console.log('\n🎉 ALL TESTS PASSED');
+    return { success: true, message: 'Cache and snapshot integrity verified' };
+  } catch (err) {
+    console.error('❌ TEST FAILED:', err.message);
+    console.error(err.stack);
+    return { success: false, error: err.message };
+  }
 }

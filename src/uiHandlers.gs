@@ -141,7 +141,7 @@ function fetchShortcutsBatch(snapshotToken, offset, limit) {
  */
 function upsertShortcut(payload) {
   ensureSheets_();
-  const lock = LockService.getDocumentLock();
+  const lock = LockService.getScriptLock();
   lock.waitLock(30000);
 
   try {
@@ -203,7 +203,7 @@ function upsertShortcut(payload) {
  */
 function deleteShortcut(key) {
   ensureSheets_();
-  const lock = LockService.getDocumentLock();
+  const lock = LockService.getScriptLock();
   lock.waitLock(30000);
 
   try {
@@ -300,7 +300,7 @@ function logCopyAction(shortcutKey) {
  */
 function bulkImport(payload) {
   ensureSheets_();
-  const lock = LockService.getDocumentLock();
+  const lock = LockService.getScriptLock();
   lock.waitLock(30000);
 
   try {

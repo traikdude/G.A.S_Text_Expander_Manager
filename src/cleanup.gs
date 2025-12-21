@@ -89,7 +89,7 @@ function debugFavoritesColumns() {
 function cleanupDuplicateShortcuts() {
   console.log('--- Starting Shortcuts Cleanup ---');
 
-  const lock = LockService.getDocumentLock();
+  const lock = LockService.getScriptLock();
 
   try {
     lock.waitLock(30000);

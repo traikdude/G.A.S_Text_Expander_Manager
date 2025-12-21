@@ -41,6 +41,18 @@ git commit -m "Your descriptive message"
 git push origin master
 ```
 
+## Authentication & CLI Setup
+
+For complete authentication troubleshooting and `clasp run` configuration, see:
+[CLASP Run Authentication Playbook](docs/CLASP_RUN_AUTH_PLAYBOOK.md)
+
+**Quick Start**:
+```powershell
+clasp login --creds creds.json --use-project-scopes
+clasp push
+clasp run testCacheAndSnapshotIntegrity
+```
+
 ## 🔐 Security Note
 The `creds.json` file and any sensitive local environment files are excluded from git tracking via `.gitignore`. Never commit service account keys or OAuth client secrets to the public repository.
 
