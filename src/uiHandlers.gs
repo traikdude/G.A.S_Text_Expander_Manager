@@ -21,18 +21,28 @@
 
 /**
  * UI bootstrap loader.
+ * Returns metadata and the first batch of shortcuts.
  * @return {Object} Bootstrap payload.
  */
 function getAppBootstrapData() {
   ensureSheets_();
   const userEmail = getUserEmail_();
-  const shortcuts = getShortcutsCached_();
+  const allShortcuts = getShortcutsCached_();
   
   // Use new centralized reader
   const favorites = listMyFavorites_();
   const favSet = new Set(favorites.map(f => f.key));
   
-  const shortcutsWithFav = shortcuts.map(s => ({
+  // PAGE 1: Slice the first batch
+  const limit = CFG.INITIAL_PAGE_SIZE || 1000;
+  const firstBatch = allShortcuts.slice(0, limit);
+  const hasMore = allShortcuts.length > limit;
+
+  if (CFG.DEBUG_MODE) {
+    console.log(`[Bootstrap] Total: ${allShortcuts.length}, Sending: ${firstBatch.length}, HasMore: ${hasMore}`);
+  }
+  
+  const shortcutsWithFav = firstBatch.map(s => ({
     key: s.key,
     expansion: s.expansion,
     application: s.application,
@@ -50,8 +60,57 @@ function getAppBootstrapData() {
     favorites,
     webAppUrl: getWebAppUrl_(),
     version: getCacheVersion_(),
+    total: allShortcuts.length,
+    offset: limit,
+    hasMore: hasMore,
     sheetNames: { shortcuts: CFG.SHEET_SHORTCUTS, favorites: CFG.SHEET_FAVORITES },
   };
+}
+
+/**
+ * Fetches a specific batch of shortcuts.
+ * @param {number} offset - Start index.
+ * @param {number} limit - Number of items to fetch.
+ * @return {Object} Batch result.
+ */
+function fetchShortcutsBatch(offset, limit) {
+  try {
+    const allShortcuts = getShortcutsCached_();
+    const start = Number(offset) || 0;
+    const count = Number(limit) || CFG.INITIAL_PAGE_SIZE;
+    
+    const slice = allShortcuts.slice(start, start + count);
+    const hasMore = allShortcuts.length > (start + count);
+    
+    // Re-map favorites state (fresh read to ensure accuracy)
+    const favorites = listMyFavorites_();
+    const favSet = new Set(favorites.map(f => f.key));
+
+    const mapped = slice.map(s => ({
+      key: s.key,
+      expansion: s.expansion,
+      application: s.application,
+      description: s.description,
+      language: s.language,
+      tags: s.tags,
+      updatedAt: s.updatedAt,
+      favorite: favSet.has(s.key),
+    }));
+
+    if (CFG.DEBUG_MODE) {
+      console.log(`[FetchBatch] Offset: ${start}, Limit: ${count}, Returned: ${mapped.length}, HasMore: ${hasMore}`);
+    }
+
+    return {
+      ok: true,
+      shortcuts: mapped,
+      offset: start + mapped.length,
+      hasMore: hasMore,
+      total: allShortcuts.length
+    };
+  } catch (err) {
+    return { ok: false, message: stringifyError_(err) };
+  }
 }
 
 // ============================================================================
