@@ -37,6 +37,8 @@ const CFG = {
   MAX_LANGUAGE_LEN: 64,
   MAX_APP_LEN: 128,
   MAX_DESC_LEN: 2000,
+  INITIAL_PAGE_SIZE: 1000, // Batch size for progressive loading
+  DEBUG_MODE: true,        // Enable verbose logging
 };
 
 const HEADERS_SHORTCUTS = [
