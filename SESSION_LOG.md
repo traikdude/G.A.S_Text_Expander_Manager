@@ -148,6 +148,104 @@ Scope Boundaries: No API enablement, auth changes, or code modifications without
 │  Expertise:   Technical                                                       │
 └───────────────────────────────────────────────────────────────────────────────┘
 
+┌───────────────────────────────────────────────────────────────────────────────┐
+│ 📝 EVENT LOG ENTRY #2                                                         │
+├───────────────────────────────────────────────────────────────────────────────┤
+│ ⏰ TEMPORAL DATA                                                              │
+│ ───────────────────────────────────────────────────────────────────────────── │
+│ Timestamp:     2025-12-20T22:50:00-05:00                                      │
+│ Session Elapsed: 00:10:00                                                     │
+│ Event Duration:  00:02:00                                                     │
+│ Sequence:        Event #2 in current session                                  │
+│                                                                               │
+│ 📋 5W1H DOCUMENTATION                                                         │
+│ ───────────────────────────────────────────────────────────────────────────── │
+│ WHAT:                                                                         │
+│  Task Type:  [Deploy | Version Control]                                       │
+│  Description: Committed changes to git and pushed to Google Apps Script.      │
+│  Artifacts:   Git commit 9b6e0fe, GAS deployment                              │
+│  Errors:      None                                                            │
+│                                                                               │
+│ HOW:                                                                          │
+│  Methodology: Git standard workflow + clasp push                              │
+│  Patterns:    Atomic commit, CI/CD-lite (push to deploy)                      │
+│  Tools:       git, clasp                                                      │
+│  Techniques:  Command chaining                                                │
+│                                                                               │
+│ WHEN:                                                                         │
+│  Trigger:     User instruction "proceed with 1,2 and 3"                       │
+│  Sequence:    After verification, before next task                            │
+│  Dependencies: Event #1 (Verification)                                        │
+│  Enables:     Project stability for further work                              │
+│                                                                               │
+│ WHERE:                                                                        │
+│  File(s):     src/Index.html, SESSION_LOG.md                                  │
+│  Function(s): N/A                                                             │
+│  Environment: Local CLI -> GitHub / Google Cloud                              │
+│                                                                               │
+│ WHY:                                                                          │
+│  Rationale:   Persist improvements and ensure live script matches code.       │
+│  Alternatives: Manual copy-paste (rejected for reliability)                   │
+│  Trade-offs:  None                                                            │
+│  Constraints: Network access required                                         │
+│                                                                               │
+│ WHO:                                                                          │
+│  Requester:   User                                                            │
+│  Stakeholders: User, Developer                                                │
+│  Target User: N/A                                                             │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────────────┐
+│ 📝 EVENT LOG ENTRY #3                                                         │
+├───────────────────────────────────────────────────────────────────────────────┤
+│ ⏰ TEMPORAL DATA                                                              │
+│ ───────────────────────────────────────────────────────────────────────────── │
+│ Timestamp:     2025-12-20T23:05:00-05:00                                      │
+│ Session Elapsed: 00:25:00                                                     │
+│ Event Duration:  00:05:00                                                     │
+│ Sequence:        Event #3 in current session                                  │
+│                                                                               │
+│ 📋 5W1H DOCUMENTATION                                                         │
+│ ───────────────────────────────────────────────────────────────────────────── │
+│ WHAT:                                                                         │
+│  Task Type:  [Bug Fix | UI/UX]                                                │
+│  Description: Fixed UI bug where fixed header overlapped first row of items.  │
+│  Artifacts:   src/Index.html (CSS & JS updates)                               │
+│  Errors:      None                                                            │
+│                                                                               │
+│ HOW:                                                                          │
+│  Methodology: Dynamic CSS variable + JS ResizeObserver                        │
+│  Patterns:    Reactive Layout                                                 │
+│  Tools:       getBoundingClientRect, ResizeObserver, CSS calc()               │
+│  Techniques:  Layout syncing on load, resize, render, and tab switch          │
+│                                                                               │
+│ WHEN:                                                                         │
+│  Trigger:     User bug report (icons not working on first row)                │
+│  Sequence:    After initial setup and sync                                    │
+│  Dependencies: None                                                           │
+│  Enables:     Reliable UI interaction across all viewports                    │
+│                                                                               │
+│ WHERE:                                                                        │
+│  File(s):     src/Index.html                                                  │
+│  Function(s): syncTopBarHeight, setupResizeObserver, window.onload,           │
+│               doRender, switchTab                                             │
+│  Environment: Browser/Web App context                                         │
+│                                                                               │
+│ WHY:                                                                          │
+│  Rationale:   Hardcoded padding failed when header height varied (narrow      │
+│               screens), blocking clicks on the first row.                     │
+│  Alternatives: Media queries (brittle), fixed height (inflexible)             │
+│  Trade-offs:  Minor JS overhead for ResizeObserver (negligible)               │
+│  Constraints: Must support IE-like environments (Apps Script limits) -        │
+│               ResizeObserver is generally supported in modern GAS Web Apps    │
+│                                                                               │
+│ WHO:                                                                          │
+│  Requester:   User                                                            │
+│  Stakeholders: End Users                                                      │
+│  Target User: All users                                                       │
+│  Expertise:   Frontend Dev                                                    │
+└───────────────────────────────────────────────────────────────────────────────┘
+
 
 
 

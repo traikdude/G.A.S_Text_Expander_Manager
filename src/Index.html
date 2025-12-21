@@ -817,7 +817,7 @@
     }
 
     .main-content {
-      padding-top: 220px !important;
+      padding-top: calc(var(--topbar-h, 220px) + 12px) !important;
       padding-bottom: 50px;
     }
 
@@ -1103,9 +1103,33 @@
     };
 
     // ========================================================================
+    // UI LAYOUT SYNC (Fix for header overlap)
+    // ========================================================================
+    function syncTopBarHeight() {
+      const topBar = document.querySelector('.top-bar');
+      if (!topBar) return;
+      const height = topBar.getBoundingClientRect().height;
+      document.documentElement.style.setProperty('--topbar-h', height + 'px');
+    }
+
+    function setupResizeObserver() {
+      const topBar = document.querySelector('.top-bar');
+      if (!topBar) return;
+      
+      const observer = new ResizeObserver(() => {
+        syncTopBarHeight();
+      });
+      observer.observe(topBar);
+      
+      window.addEventListener('resize', syncTopBarHeight);
+    }
+
+    // ========================================================================
     // INITIALIZATION
     // ========================================================================
     window.onload = function() {
+      syncTopBarHeight();
+      setupResizeObserver();
       initializeApp();
     };
 
@@ -1262,6 +1286,8 @@
         renderShortcutsGrid();
         renderFavoritesGrid();
         updateEmptyStates();
+        // Sync layout after render in case DOM changes affected header (e.g. notifications)
+        setTimeout(syncTopBarHeight, 0);
       } finally {
         isRendering = false;
       }
@@ -1393,6 +1419,8 @@
       if (name !== 'import') {
         render();
       }
+      // Sync layout after tab switch
+      setTimeout(syncTopBarHeight, 0);
     }
 
     // ========================================================================
