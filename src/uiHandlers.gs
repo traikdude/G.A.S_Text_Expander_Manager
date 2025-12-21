@@ -21,72 +21,87 @@
 
 /**
  * UI bootstrap loader.
- * Returns metadata and the first batch of shortcuts.
+ * Returns metadata. Client must initiate snapshot creation.
  * @return {Object} Bootstrap payload.
  */
 function getAppBootstrapData() {
   ensureSheets_();
   const userEmail = getUserEmail_();
-  const allShortcuts = getShortcutsCached_();
   
   // Use new centralized reader
   const favorites = listMyFavorites_();
-  const favSet = new Set(favorites.map(f => f.key));
   
-  // PAGE 1: Slice the first batch
-  const limit = CFG.INITIAL_PAGE_SIZE || 1000;
-  const firstBatch = allShortcuts.slice(0, limit);
-  const hasMore = allShortcuts.length > limit;
-
-  if (CFG.DEBUG_MODE) {
-    console.log(`[Bootstrap] Total: ${allShortcuts.length}, Sending: ${firstBatch.length}, HasMore: ${hasMore}`);
-  }
-  
-  const shortcutsWithFav = firstBatch.map(s => ({
-    key: s.key,
-    expansion: s.expansion,
-    application: s.application,
-    description: s.description,
-    language: s.language,
-    tags: s.tags,
-    updatedAt: s.updatedAt,
-    favorite: favSet.has(s.key),
-  }));
-
   return {
     ok: true,
     userEmail,
-    shortcuts: shortcutsWithFav,
     favorites,
     webAppUrl: getWebAppUrl_(),
     version: getCacheVersion_(),
-    total: allShortcuts.length,
-    offset: limit,
-    hasMore: hasMore,
     sheetNames: { shortcuts: CFG.SHEET_SHORTCUTS, favorites: CFG.SHEET_FAVORITES },
   };
 }
 
 /**
- * Fetches a specific batch of shortcuts.
+ * Creates a snapshot and returns the first batch.
+ */
+function beginShortcutsSnapshotHandler() {
+  try {
+    const meta = beginShortcutsSnapshot();
+    const batch = fetchSnapshotPage_(meta.snapshotToken, 0, CFG.INITIAL_PAGE_SIZE);
+    
+    if (batch.error) throw new Error(batch.error);
+
+    // Map favorites
+    const favorites = listMyFavorites_();
+    const favSet = new Set(favorites.map(f => f.key));
+    
+    batch.items = batch.items.map(s => ({
+      key: s.key,
+      expansion: s.expansion,
+      application: s.application,
+      description: s.description,
+      language: s.language,
+      tags: s.tags,
+      updatedAt: s.updatedAt,
+      favorite: favSet.has(s.key),
+    }));
+
+    return {
+      ok: true,
+      snapshotToken: meta.snapshotToken,
+      total: meta.total,
+      builtAt: meta.builtAt,
+      shortcuts: batch.items,
+      offset: batch.offset,
+      hasMore: batch.hasMore
+    };
+  } catch (err) {
+    return { ok: false, message: stringifyError_(err) };
+  }
+}
+
+/**
+ * Fetches a specific batch of shortcuts from a snapshot.
+ * @param {string} snapshotToken - The snapshot ID.
  * @param {number} offset - Start index.
  * @param {number} limit - Number of items to fetch.
  * @return {Object} Batch result.
  */
-function fetchShortcutsBatch(offset, limit) {
+function fetchShortcutsBatch(snapshotToken, offset, limit) {
   try {
-    const allShortcuts = getShortcutsCached_();
-    const start = Number(offset) || 0;
-    const count = Number(limit) || CFG.INITIAL_PAGE_SIZE;
+    if (!snapshotToken) return { ok: false, message: 'Missing snapshot token' };
+
+    const batch = fetchSnapshotPage_(snapshotToken, offset, limit);
     
-    const slice = allShortcuts.slice(start, start + count);
-    const hasMore = allShortcuts.length > (start + count);
-    
+    if (batch.error === 'SNAPSHOT_EXPIRED') {
+      return { ok: false, error: 'SNAPSHOT_EXPIRED', message: 'Snapshot expired. Reloading...' };
+    }
+
     // Re-map favorites state (fresh read to ensure accuracy)
     const favorites = listMyFavorites_();
     const favSet = new Set(favorites.map(f => f.key));
 
-    const mapped = slice.map(s => ({
+    const mapped = batch.items.map(s => ({
       key: s.key,
       expansion: s.expansion,
       application: s.application,
@@ -98,15 +113,16 @@ function fetchShortcutsBatch(offset, limit) {
     }));
 
     if (CFG.DEBUG_MODE) {
-      console.log(`[FetchBatch] Offset: ${start}, Limit: ${count}, Returned: ${mapped.length}, HasMore: ${hasMore}`);
+      console.log(`[FetchBatch] Token: ${snapshotToken.substring(0,8)}..., Offset: ${offset}, Limit: ${limit}, Returned: ${mapped.length}`);
     }
 
     return {
       ok: true,
       shortcuts: mapped,
-      offset: start + mapped.length,
-      hasMore: hasMore,
-      total: allShortcuts.length
+      offset: batch.offset,
+      hasMore: batch.hasMore,
+      total: batch.total,
+      snapshotToken: snapshotToken
     };
   } catch (err) {
     return { ok: false, message: stringifyError_(err) };

@@ -37,8 +37,9 @@ const CFG = {
   MAX_LANGUAGE_LEN: 64,
   MAX_APP_LEN: 128,
   MAX_DESC_LEN: 2000,
-  INITIAL_PAGE_SIZE: 1000, // Batch size for progressive loading
-  DEBUG_MODE: true,        // Enable verbose logging
+  INITIAL_PAGE_SIZE: 1000,
+  DEBUG_MODE: true,
+  SNAPSHOT_TTL_SECONDS: 60 * 5, // 5 minutes per snapshot
 };
 
 const HEADERS_SHORTCUTS = [
@@ -56,6 +57,75 @@ const HEADERS_FAVORITES = [
   'Snippet Name',
   'CreatedAt',
 ];
+
+// ============================================================================ 
+// SNAPSHOT & PAGING API
+// ============================================================================ 
+
+/**
+ * Creates a stable snapshot of the current sheet data.
+ * @return {Object} Snapshot metadata { snapshotToken, total, pageSize, builtAt }.
+ */
+function beginShortcutsSnapshot() {
+  const lock = LockService.getScriptLock();
+  // Short lock just to serialize snapshot creation if spam-clicked
+  if (lock.tryLock(5000)) {
+    try {
+      const allShortcuts = getShortcutsFromSheet_();
+      const token = Utilities.getUuid();
+      const now = new Date().toISOString();
+      
+      const meta = {
+        snapshotToken: token,
+        total: allShortcuts.length,
+        builtAt: now,
+        pageSize: CFG.INITIAL_PAGE_SIZE
+      };
+
+      // Write full dataset to private snapshot cache
+      writeSnapshotCache_(token, allShortcuts);
+      
+      if (CFG.DEBUG_MODE) {
+        console.log(`[Snapshot] Created ${token}. Items: ${meta.total}`);
+      }
+
+      return meta;
+    } finally {
+      lock.releaseLock();
+    }
+  } else {
+    throw new Error('Server busy. Please try again.');
+  }
+}
+
+/**
+ * Reads a page from a specific snapshot.
+ * @param {string} snapshotToken - The snapshot ID.
+ * @param {number} offset - Start index.
+ * @param {number} limit - Number of items.
+ * @return {Object} Page data or error if expired.
+ */
+function fetchSnapshotPage_(snapshotToken, offset, limit) {
+  const allData = readSnapshotCache_(snapshotToken);
+  
+  if (!allData) {
+    if (CFG.DEBUG_MODE) console.warn(`[Snapshot] Missing/Expired token: ${snapshotToken}`);
+    return { error: 'SNAPSHOT_EXPIRED' };
+  }
+
+  const start = Number(offset) || 0;
+  const count = Number(limit) || CFG.INITIAL_PAGE_SIZE;
+  const slice = allData.slice(start, start + count);
+  const hasMore = allData.length > (start + count);
+
+  return {
+    items: slice,
+    offset: start + slice.length,
+    total: allData.length,
+    hasMore: hasMore,
+    snapshotToken: snapshotToken
+  };
+}
 
 // ============================================================================ 
 // TRIGGERS & ENTRY POINTS
@@ -257,20 +327,35 @@ function getShortcutsCached_() {
 }
 
 // ============================================================================ 
-// INTERNAL: CHUNKED CACHING (FIXED COMPRESSION)
+// INTERNAL: CHUNKED CACHING (SNAPSHOT SUPPORT)
 // ============================================================================ 
 
 /**
- * Reads shortcuts from cache.
- * @return {Array<Object>|null} Shortcuts array or null.
+ * Reads data from a specific snapshot token.
  */
-function readShortcutsCache_() {
+function readSnapshotCache_(token) {
+  return readCacheByKey_(`SNAP_${token}`);
+}
+
+/**
+ * Writes data to a specific snapshot token.
+ */
+function writeSnapshotCache_(token, list) {
+  writeCacheByKey_(`SNAP_${token}`, list, CFG.SNAPSHOT_TTL_SECONDS);
+}
+
+/**
+ * Reads from cache using a dynamic prefix.
+ */
+function readCacheByKey_(prefix) {
+  const metaKey = `${prefix}_META`;
   const cache = CacheService.getScriptCache();
-  const metaRaw = cache.get(CFG.CACHE_META_KEY);
+  const metaRaw = cache.get(metaKey);
+  
   if (metaRaw) {
     const meta = safeJsonParse_(metaRaw);
     if (meta && meta.chunkCount && meta.encoding === 'gz-b64') {
-      const combined = readChunksFromCache_(meta.chunkCount);
+      const combined = readChunksByKey_(prefix, meta.chunkCount);
       if (combined) {
         const json = decodeGzB64_(combined);
         const arr = safeJsonParse_(json);
@@ -278,106 +363,49 @@ function readShortcutsCache_() {
       }
     }
   }
-
-  // Fallback: PropertiesService
-  const props = PropertiesService.getScriptProperties();
-  const metaProp = props.getProperty(CFG.CACHE_META_KEY);
-  if (metaProp) {
-    const meta = safeJsonParse_(metaProp);
-    if (meta && meta.chunkCount && meta.encoding === 'gz-b64') {
-      const combined = readChunksFromProps_(meta.chunkCount);
-      if (combined) {
-        const json = decodeGzB64_(combined);
-        const arr = safeJsonParse_(json);
-        if (Array.isArray(arr)) return arr;
-      }
-    }
-  }
-
   return null;
 }
 
 /**
- * Writes shortcuts to cache.
- * @param {Array<Object>} list - Shortcuts array.
- * @return {boolean} True if CacheService succeeded.
+ * Writes to cache using a dynamic prefix.
  */
-function writeShortcutsCache_(list) {
+function writeCacheByKey_(prefix, list, ttl) {
   const json = JSON.stringify(list || []);
   const encoded = encodeGzB64_(json);
-
   const chunks = chunkString_(encoded, 90000);
+  
   const meta = {
     chunkCount: chunks.length,
     encoding: 'gz-b64',
-    updatedAt: new Date().toISOString(),
-    version: getCacheVersion_(),
+    updatedAt: new Date().toISOString()
   };
 
-  // Try CacheService first.
-  let cacheOk = true;
   try {
     const cache = CacheService.getScriptCache();
-    cache.put(CFG.CACHE_META_KEY, JSON.stringify(meta), CFG.CACHE_TTL_SECONDS);
+    const payload = {};
+    payload[`${prefix}_META`] = JSON.stringify(meta);
+    
     for (let i = 0; i < chunks.length; i++) {
-      cache.put(`${CFG.CACHE_KEY_PREFIX}_${i + 1}`, chunks[i], CFG.CACHE_TTL_SECONDS);
+      payload[`${prefix}_${i + 1}`] = chunks[i];
     }
+    
+    cache.putAll(payload, ttl);
+    return true;
   } catch (err) {
-    cacheOk = false;
-  }
-
-  // Always write fallback meta + chunks (keeps UI fast even if cache evicts).
-  try {
-    const props = PropertiesService.getScriptProperties();
-    props.setProperty(CFG.CACHE_META_KEY, JSON.stringify(meta));
-    for (let i = 0; i < chunks.length; i++) {
-      props.setProperty(`${CFG.PROP_FALLBACK_PREFIX}${i + 1}`, chunks[i]);
-    }
-    // Clean extras from previous longer cache.
-    cleanupExtraPropChunks_(chunks.length);
-  } catch (err) {
-    // If fallback fails too, we still allow normal operation by reading from sheet next time.
-  }
-
-  return cacheOk;
-}
-
-/**
- * Invalidates all cache storage.
- */
-function invalidateShortcutsCache_() {
-  const cache = CacheService.getScriptCache();
-  const props = PropertiesService.getScriptProperties();
-
-  // CacheService delete
-  const metaRaw = cache.get(CFG.CACHE_META_KEY);
-  if (metaRaw) {
-    const meta = safeJsonParse_(metaRaw);
-    const count = meta && meta.chunkCount ? Number(meta.chunkCount) : 0;
-    cache.remove(CFG.CACHE_META_KEY);
-    for (let i = 1; i <= count; i++) cache.remove(`${CFG.CACHE_KEY_PREFIX}_${i}`);
-  }
-
-  // PropertiesService delete
-  const metaProp = props.getProperty(CFG.CACHE_META_KEY);
-  if (metaProp) {
-    const meta = safeJsonParse_(metaProp);
-    const count = meta && meta.chunkCount ? Number(meta.chunkCount) : 0;
-    props.deleteProperty(CFG.CACHE_META_KEY);
-    for (let i = 1; i <= count; i++) props.deleteProperty(`${CFG.PROP_FALLBACK_PREFIX}${i}`);
+    console.error('Cache write failed:', err);
+    return false;
   }
 }
 
-/**
- * Reads chunks from CacheService.
- * @param {number} count - Number of chunks.
- * @return {string|null} Combined string or null.
- */
-function readChunksFromCache_(count) {
+function readChunksByKey_(prefix, count) {
   const cache = CacheService.getScriptCache();
+  const keys = [];
+  for (let i = 1; i <= count; i++) keys.push(`${prefix}_${i}`);
+  
+  const chunks = cache.getAll(keys);
   let combined = '';
   for (let i = 1; i <= count; i++) {
-    const part = cache.get(`${CFG.CACHE_KEY_PREFIX}_${i}`);
+    const part = chunks[`${prefix}_${i}`];
     if (!part) return null;
     combined += part;
   }
@@ -385,38 +413,14 @@ function readChunksFromCache_(count) {
 }
 
 /**
- * Reads chunks from PropertiesService.
- * @param {number} count - Number of chunks.
- * @return {string|null} Combined string or null.
+ * DEPRECATED: Legacy global cache reader (kept for backward compat if needed).
  */
-function readChunksFromProps_(count) {
-  const props = PropertiesService.getScriptProperties();
-  let combined = '';
-  for (let i = 1; i <= count; i++) {
-    const part = props.getProperty(`${CFG.PROP_FALLBACK_PREFIX}${i}`);
-    if (!part) return null;
-    combined += part;
-  }
-  return combined;
+function getShortcutsCached_() {
+  return getShortcutsFromSheet_(); // Always read fresh for now to be safe
 }
 
-/**
- * Cleans up extra property chunks.
- * @param {number} keepCount - Number of chunks to keep.
- */
-function cleanupExtraPropChunks_(keepCount) {
-  const props = PropertiesService.getScriptProperties();
-  const all = props.getProperties();
-  const keys = Object.keys(all).filter(k => k.indexOf(CFG.PROP_FALLBACK_PREFIX) === 0);
-  const nums = keys
-    .map(k => Number(k.replace(CFG.PROP_FALLBACK_PREFIX, '')))
-    .filter(n => Number.isFinite(n))
-    .sort((a, b) => a - b);
-
-  for (let i = 0; i < nums.length; i++) {
-    if (nums[i] > keepCount) props.deleteProperty(`${CFG.PROP_FALLBACK_PREFIX}${nums[i]}`);
-  }
-}
+// REMOVED: Old PropertyService fallback logic to simplify Snapshot architecture.
+// Snapshots are ephemeral; if CacheService fails, we retry or fail gracefully.
 
 /**
  * FIXED: Encodes a string as gzipped base64.
