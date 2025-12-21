@@ -37,9 +37,9 @@ const CFG = {
   MAX_LANGUAGE_LEN: 64,
   MAX_APP_LEN: 128,
   MAX_DESC_LEN: 2000,
-  INITIAL_PAGE_SIZE: 1000,
+  INITIAL_PAGE_SIZE: 5000, // Benchmark: 87ms @ 2700 items (2025-12-21)
   DEBUG_MODE: true,
-  SNAPSHOT_TTL_SECONDS: 60 * 5, // 5 minutes per snapshot
+  SNAPSHOT_TTL_SECONDS: 60 * 5 // 5 min snapshot cache
 };
 
 const HEADERS_SHORTCUTS = [
@@ -801,6 +801,144 @@ function testCacheAndSnapshotIntegrity() {
     return { success: true, message: 'Cache and snapshot integrity verified' };
   } catch (err) {
     console.error('❌ TEST FAILED:', err.message);
+    console.error(err.stack);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * SMOKE TEST: Validates paging determinism and snapshot integrity.
+ * Run via: clasp run testPagingDeterminism
+ */
+function testPagingDeterminism() {
+  console.log('=== Paging Determinism Test ===\n');
+
+  try {
+    // TEST A: Create snapshot
+    const meta = beginShortcutsSnapshot();
+    console.log('✅ Snapshot created:', meta.snapshotToken.substring(0, 8) + '...');
+
+    // TEST B: Fetch three consecutive pages
+    const page1 = fetchSnapshotPage_(meta.snapshotToken, 0, 10);
+    const page2 = fetchSnapshotPage_(meta.snapshotToken, 10, 10);
+    const page3 = fetchSnapshotPage_(meta.snapshotToken, 20, 10);
+
+    console.log('✅ Page 1 items:', page1.items.length);
+    console.log('✅ Page 2 items:', page2.items.length);
+    console.log('✅ Page 3 items:', page3.items.length);
+
+    // TEST C: Check for duplicate keys across pages
+    const allKeys = [
+      ...page1.items.map(i => i.key),
+      ...page2.items.map(i => i.key),
+      ...page3.items.map(i => i.key)
+    ];
+    const uniqueKeys = new Set(allKeys);
+    const hasDuplicates = allKeys.length !== uniqueKeys.size;
+
+    console.log('✅ Total keys:', allKeys.length);
+    console.log('✅ Unique keys:', uniqueKeys.size);
+    console.log('✅ No duplicates:', !hasDuplicates);
+
+    if (hasDuplicates) {
+      throw new Error('Duplicate keys detected across pages!');
+    }
+
+    // TEST D: Verify deterministic ordering (fetch page 1 again)
+    const page1Again = fetchSnapshotPage_(meta.snapshotToken, 0, 10);
+    const orderMatch = JSON.stringify(page1.items) === JSON.stringify(page1Again.items);
+    console.log('✅ Page 1 deterministic:', orderMatch);
+
+    if (!orderMatch) {
+      throw new Error('Page 1 returned different data on second fetch!');
+    }
+
+    // TEST E: Test snapshot expiry detection
+    const cache = CacheService.getScriptCache();
+    cache.remove('SNAP_' + meta.snapshotToken + '_META');
+    const expiredFetch = fetchSnapshotPage_(meta.snapshotToken, 0, 10);
+    const isExpired = expiredFetch.error === 'SNAPSHOT_EXPIRED';
+    console.log('✅ Expiry handled correctly:', isExpired);
+
+    if (!isExpired) {
+      throw new Error('Snapshot expiry not detected!');
+    }
+
+    console.log('\n🎉 ALL PAGING TESTS PASSED');
+    return { success: true, message: 'Paging determinism verified' };
+  } catch (err) {
+    console.error('❌ TEST FAILED:', err.message);
+    console.error(err.stack);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * BENCHMARKING: Tests performance of different page sizes for snapshot reads.
+ * Run via: clasp run testPageSizePerformance
+ */
+function testPageSizePerformance() {
+  console.log('=== Snapshot Paging Performance Test ===\\n');
+
+  try {
+    // Stage 1: Create a stable snapshot to test against
+    console.log('1. Creating data snapshot...');
+    const meta = beginShortcutsSnapshot();
+    const totalItems = meta.total;
+    const snapshotToken = meta.snapshotToken;
+    
+    if (!totalItems || !snapshotToken) {
+      throw new Error('Failed to create a valid snapshot. Ensure sheet has data.');
+    }
+    console.log(`  -> Snapshot created: ${snapshotToken} (${totalItems} items)`);
+
+    // Stage 2: Define batch sizes and run tests
+    const pageSizesToTest = [500, 1000, 2000, 5000, 8000, 10000];
+    const results = [];
+
+    console.log(`\\n2. Benchmarking ${pageSizesToTest.length} page sizes...`);
+
+    pageSizesToTest.forEach(pageSize => {
+      console.log(`\\n  -> Testing page size: ${pageSize}`);
+      const startTime = new Date();
+      let offset = 0;
+      let pagesFetched = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        const pageResult = fetchSnapshotPage_(snapshotToken, offset, pageSize);
+        if (pageResult.error) {
+          throw new Error(`Snapshot fetch failed: ${pageResult.error}`);
+        }
+        
+        offset = pageResult.offset;
+        hasMore = pageResult.hasMore;
+        pagesFetched++;
+      }
+
+      const endTime = new Date();
+      const durationMs = endTime - startTime;
+      
+      results.push({
+        pageSize: pageSize,
+        durationMs: durationMs,
+        pages: pagesFetched
+      });
+
+      console.log(`     - Done in ${durationMs}ms (${pagesFetched} pages)`);
+    });
+
+    // Stage 3: Summarize results
+    console.log('\\n=== SUMMARY ===');
+    results.forEach(r => {
+      console.log(`Page Size: ${r.pageSize.toString().padEnd(5)} | Duration: ${r.durationMs.toString().padEnd(6)} ms | Pages: ${r.pages}`);
+    });
+    console.log('\\n🎉 Benchmark complete.');
+
+    return { success: true, results: results };
+
+  } catch (err) {
+    console.error('\\n❌ BENCHMARK FAILED:', err.message);
     console.error(err.stack);
     return { success: false, error: err.message };
   }
