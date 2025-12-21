@@ -1141,26 +1141,33 @@
     }
 
     // --- DATASET NORMALIZATION & DEDUPLICATION PATCH ---
+    // FIX: Use ONLY the key for deduplication since Snippet Name is the unique identifier.
+    // The old composite key (key|expansion|language) could allow duplicates if any field differed.
     function normalizeDataset(data) {
       const seen = new Set();
-      return data.map((item, index) => {
-        // Ensure item has a unique ID (if not provided, generate one)
-        // We use the key (Snippet Name) as the primary stable identifier logic
-        const id = item.id || `${item.key}-${index}`;
-        return { ...item, id: id };
-      }).filter(item => {
-        // Create a unique composite key to detect true duplicates
-        // Key + Expansion + Language (LanguageCategory)
-        const compositeKey = `${item.key}|${item.expansion}|${item.language || ''}`;
-        
-        if (seen.has(compositeKey)) {
-          console.warn(`Duplicate removed: ${item.key}`);
-          return false;
+      const result = [];
+
+      for (let i = 0; i < data.length; i++) {
+        const item = data[i];
+        const key = String(item.key || '').trim();
+
+        // Skip items without a valid key
+        if (!key) continue;
+
+        // FIX: Use ONLY the key for deduplication (not composite key)
+        if (seen.has(key)) {
+          console.warn(`[normalizeDataset] Duplicate removed: "${key}" at index ${i}`);
+          continue;
         }
-        
-        seen.add(compositeKey);
-        return true;
-      });
+
+        seen.add(key);
+
+        // Assign a stable ID based on key
+        const id = item.id || `shortcut-${key}`;
+        result.push({ ...item, id: id });
+      }
+
+      return result;
     }
 
     function handleBootstrapFailure(err) {
@@ -1227,12 +1234,46 @@
     }
 
     // ========================================================================
-    // RENDERING
+    // RENDERING (with debouncing to prevent duplicate renders)
     // ========================================================================
+    let renderDebounceTimer = null;
+    let isRendering = false;
+
     function render() {
-      renderShortcutsGrid();
-      renderFavoritesGrid();
-      updateEmptyStates();
+      // Debounce rapid render calls to prevent flickering/duplication
+      if (renderDebounceTimer) {
+        clearTimeout(renderDebounceTimer);
+      }
+
+      renderDebounceTimer = setTimeout(() => {
+        renderDebounceTimer = null;
+        doRender();
+      }, 16); // ~1 frame at 60fps
+    }
+
+    function doRender() {
+      if (isRendering) {
+        console.warn('[doRender] Already rendering, skipping');
+        return;
+      }
+
+      isRendering = true;
+      try {
+        renderShortcutsGrid();
+        renderFavoritesGrid();
+        updateEmptyStates();
+      } finally {
+        isRendering = false;
+      }
+    }
+
+    // Immediate render for when we need it (e.g., after data refresh)
+    function renderImmediate() {
+      if (renderDebounceTimer) {
+        clearTimeout(renderDebounceTimer);
+        renderDebounceTimer = null;
+      }
+      doRender();
     }
 
     function renderShortcutsGrid() {
@@ -1540,12 +1581,19 @@
     /**
      * 🔥 FIX #1: Star button handler with event.stopPropagation()
      * This prevents the card click event from firing when clicking the star
+     *
+     * FIX #2: Properly handle state update and render to prevent duplication.
+     * - Update local state immediately for instant feedback
+     * - Render immediately to show the change
+     * - Then do a background refresh (without re-rendering until complete)
      */
+    let favoriteRefreshPending = false;
+
     function toggleFavoriteHandler(event, key, shouldFavorite) {
       // CRITICAL: Stop event from bubbling to card click handler
       event.stopPropagation();
       event.preventDefault();
-      
+
       if (!key) {
         toast('Invalid shortcut key.', 'bad');
         return;
@@ -1557,13 +1605,13 @@
       btn.disabled = true;
       btn.innerHTML = '⏳';
 
-      console.log(`Toggle favorite: ${key} to ${shouldFavorite}`);
+      console.log(`[toggleFavoriteHandler] Toggle: ${key} -> ${shouldFavorite}`);
 
       google.script.run
         .withSuccessHandler((res) => {
-          console.log('Favorite result:', res);
+          console.log('[toggleFavoriteHandler] Result:', res);
           btn.disabled = false;
-          
+
           if (!res || !res.status) {
             btn.innerHTML = originalHtml;
             toast('Favorite update failed (invalid response).', 'bad');
@@ -1578,13 +1626,27 @@
             shortcut.favorite = isAdded;
           }
 
+          // Update button immediately
+          btn.innerHTML = isAdded ? '★' : '☆';
+          btn.classList.toggle('active', isAdded);
+          btn.title = isAdded ? 'Remove from favorites' : 'Add to favorites';
+
           toast(isAdded ? 'Added to favorites.' : 'Removed from favorites.', 'good');
-          
-          // Full refresh to sync with backend
-          refreshData(false);
+
+          // Render immediately to reflect the change
+          renderImmediate();
+
+          // Background sync to ensure consistency (debounced to avoid multiple refreshes)
+          if (!favoriteRefreshPending) {
+            favoriteRefreshPending = true;
+            setTimeout(() => {
+              favoriteRefreshPending = false;
+              refreshDataSilent();
+            }, 500);
+          }
         })
         .withFailureHandler((err) => {
-          console.error('Favorite error:', err);
+          console.error('[toggleFavoriteHandler] Error:', err);
           btn.disabled = false;
           btn.innerHTML = originalHtml;
           toast(err && err.message ? err.message : 'Favorite update failed.', 'bad');
@@ -1628,15 +1690,17 @@
             // Log the copy action AND auto-favorite
             google.script.run
               .withSuccessHandler((res) => {
-                console.log('Copy/Favorite logged');
+                console.log('[copyToClipboard] Favorite result:', res);
                 if (res && res.ok && res.favorite) {
                   // Update local state if it became a favorite
                   const s = state.shortcuts.find(item => item.key === key);
-                  if (s) s.favorite = true;
-                  render();
+                  if (s && !s.favorite) {
+                    s.favorite = true;
+                    renderImmediate();
+                  }
                 }
               })
-              .withFailureHandler((err) => console.warn('Copy log failed:', err))
+              .withFailureHandler((err) => console.warn('[copyToClipboard] Log failed:', err))
               .handleClipboardFavorite(key);
             
             // Reset button icon
@@ -1679,14 +1743,16 @@
           // Log the copy action AND auto-favorite
           google.script.run
             .withSuccessHandler((res) => {
-              console.log('Copy/Favorite logged');
+              console.log('[copyToClipboardFallback] Favorite result:', res);
               if (res && res.ok && res.favorite) {
                 const s = state.shortcuts.find(item => item.key === key);
-                if (s) s.favorite = true;
-                render();
+                if (s && !s.favorite) {
+                  s.favorite = true;
+                  renderImmediate();
+                }
               }
             })
-            .withFailureHandler((err) => console.warn('Copy log failed:', err))
+            .withFailureHandler((err) => console.warn('[copyToClipboardFallback] Log failed:', err))
             .handleClipboardFavorite(key);
         } else {
           throw new Error('execCommand failed');
@@ -1719,16 +1785,43 @@
           state.shortcuts = normalizeDataset(rawShortcuts);
           state.favorites = Array.isArray(data.favorites) ? data.favorites : [];
           state.version = data.version || '';
-          
+
           if (showToast) toast('Data refreshed.', 'good');
           setReady(`${state.shortcuts.length} shortcuts loaded`);
-          render();
+          renderImmediate();
         })
         .withFailureHandler((err) => {
           state.loaded = true;
           setReady('Load failed');
           toast(err && err.message ? err.message : 'Failed to load data.', 'bad');
-          render();
+          renderImmediate();
+        })
+        .getAppBootstrapData();
+    }
+
+    /**
+     * Silent background refresh - updates data without UI feedback.
+     * Used after favorite toggles to sync with backend without disrupting UX.
+     */
+    function refreshDataSilent() {
+      console.log('[refreshDataSilent] Starting background sync...');
+      google.script.run
+        .withSuccessHandler((data) => {
+          if (!data || !data.ok) {
+            console.warn('[refreshDataSilent] Backend returned error');
+            return;
+          }
+
+          const rawShortcuts = Array.isArray(data.shortcuts) ? data.shortcuts : [];
+          state.shortcuts = normalizeDataset(rawShortcuts);
+          state.favorites = Array.isArray(data.favorites) ? data.favorites : [];
+
+          console.log(`[refreshDataSilent] Synced ${state.shortcuts.length} shortcuts`);
+          renderImmediate();
+        })
+        .withFailureHandler((err) => {
+          console.warn('[refreshDataSilent] Background sync failed:', err);
+          // Don't show toast for silent refresh failures
         })
         .getAppBootstrapData();
     }
