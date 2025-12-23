@@ -37,7 +37,7 @@ const CFG = {
   MAX_LANGUAGE_LEN: 64,
   MAX_APP_LEN: 128,
   MAX_DESC_LEN: 2000,
-  INITIAL_PAGE_SIZE: 5000, // Benchmark: 87ms @ 2700 items (2025-12-21)
+  INITIAL_PAGE_SIZE: 5000, // Benchmark: 2709 items in ~2.2s (verified 2025-12-23)
   DEBUG_MODE: true,
   SNAPSHOT_TTL_SECONDS: 60 * 5 // 5 min snapshot cache
 };
