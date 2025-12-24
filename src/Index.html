@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <base target="_top">
   <meta charset="utf-8">
@@ -470,6 +471,7 @@
         opacity: 0;
         transform: translateY(-20px);
       }
+
       to {
         opacity: 1;
         transform: translateY(0);
@@ -704,6 +706,7 @@
         opacity: 0;
         transform: translateX(100%);
       }
+
       to {
         opacity: 1;
         transform: translateX(0);
@@ -746,7 +749,9 @@
     }
 
     @keyframes spin {
-      to { transform: rotate(360deg); }
+      to {
+        transform: rotate(360deg);
+      }
     }
 
     /* ========================================================================
@@ -791,15 +796,37 @@
       text-align: center;
     }
 
-    .mb-0 { margin-bottom: 0 !important; }
-    .mb-1 { margin-bottom: 8px !important; }
-    .mb-2 { margin-bottom: 16px !important; }
-    .mb-3 { margin-bottom: 24px !important; }
+    .mb-0 {
+      margin-bottom: 0 !important;
+    }
 
-    .mt-0 { margin-top: 0 !important; }
-    .mt-1 { margin-top: 8px !important; }
-    .mt-2 { margin-top: 16px !important; }
-    .mt-3 { margin-top: 24px !important; }
+    .mb-1 {
+      margin-bottom: 8px !important;
+    }
+
+    .mb-2 {
+      margin-bottom: 16px !important;
+    }
+
+    .mb-3 {
+      margin-bottom: 24px !important;
+    }
+
+    .mt-0 {
+      margin-top: 0 !important;
+    }
+
+    .mt-1 {
+      margin-top: 8px !important;
+    }
+
+    .mt-2 {
+      margin-top: 16px !important;
+    }
+
+    .mt-3 {
+      margin-top: 24px !important;
+    }
 
     /* * 🐛 FIX FOR FROZEN FIRST ITEM
      * The fixed header (search bar/tabs) was covering the top of the list.
@@ -813,7 +840,7 @@
       right: 0;
       background: #f8f9fa;
       padding: 16px 16px 0 16px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
     }
 
     .main-content {
@@ -822,11 +849,20 @@
     }
 
     /* Adjust margins for fixed header components */
-    .top-bar .header { margin-bottom: 12px; }
-    .top-bar .status-bar { margin-bottom: 12px; }
-    .top-bar .tabs { margin-bottom: 0; }
+    .top-bar .header {
+      margin-bottom: 12px;
+    }
+
+    .top-bar .status-bar {
+      margin-bottom: 12px;
+    }
+
+    .top-bar .tabs {
+      margin-bottom: 0;
+    }
   </style>
 </head>
+
 <body>
   <!-- Toast Container -->
   <div class="toast-container" id="toastContainer"></div>
@@ -841,155 +877,141 @@
       </div>
     </div>
 
-  <!-- Status Bar -->
-  <div class="status-bar">
-    <div class="status-text" id="statusText">Loading application...</div>
-    <div class="action-buttons">
-      <button id="btnRefresh" onclick="refreshData(true)">
-        🔄 Refresh
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <div class="status-text" id="statusText">Loading application...</div>
+      <div class="action-buttons">
+        <button id="btnRefresh" onclick="refreshData(true)">
+          🔄 Refresh
+        </button>
+        <button id="btnNew" onclick="openNewShortcutModal()">
+          ➕ New / Edit
+        </button>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" id="tabAll" onclick="switchTab('all')">
+        📋 All Shortcuts
       </button>
-      <button id="btnNew" onclick="openNewShortcutModal()">
-        ➕ New / Edit
+      <button class="tab" id="tabFav" onclick="switchTab('fav')">
+        ⭐ My Favorites
+      </button>
+      <button class="tab" id="tabImport" onclick="switchTab('import')">
+        📥 Import
       </button>
     </div>
   </div>
 
-  <!-- Tabs -->
-  <div class="tabs">
-    <button class="tab active" id="tabAll" onclick="switchTab('all')">
-      📋 All Shortcuts
-    </button>
-    <button class="tab" id="tabFav" onclick="switchTab('fav')">
-      ⭐ My Favorites
-    </button>
-    <button class="tab" id="tabImport" onclick="switchTab('import')">
-      📥 Import
-    </button>
-  </div>
-</div>
-
-<div class="main-content">
-  <!-- Tab Content: All Shortcuts -->
-  <div class="tab-content active" id="contentAll">
-    <!-- Search & Filter -->
-    <div class="search-filter">
-      <div class="search-box">
-        <input 
-          type="text" 
-          class="search-input" 
-          id="searchInput" 
-          placeholder="🔍 Search shortcuts by name, content, or tags..."
-          oninput="handleSearch()">
-        <button onclick="clearSearch()">Clear</button>
+  <div class="main-content">
+    <!-- Tab Content: All Shortcuts -->
+    <div class="tab-content active" id="contentAll">
+      <!-- Search & Filter -->
+      <div class="search-filter">
+        <div class="search-box">
+          <input type="text" class="search-input" id="searchInput"
+            placeholder="🔍 Search shortcuts by name, content, or tags..." oninput="handleSearch()">
+          <button onclick="clearSearch()">Clear</button>
+        </div>
+        <div class="filter-chips">
+          <div class="chip active" data-filter="all" onclick="handleFilterClick(this, 'all')">
+            All
+          </div>
+          <div class="chip" data-filter="favorites" onclick="handleFilterClick(this, 'favorites')">
+            ⭐ Favorites
+          </div>
+        </div>
       </div>
-      <div class="filter-chips">
-        <div class="chip active" data-filter="all" onclick="handleFilterClick(this, 'all')">
-          All
-        </div>
-        <div class="chip" data-filter="favorites" onclick="handleFilterClick(this, 'favorites')">
-          ⭐ Favorites
-        </div>
+
+      <!-- Shortcuts Grid -->
+      <div class="shortcuts-grid" id="shortcutsGrid">
+        <!-- Cards will be dynamically inserted here -->
+      </div>
+
+      <!-- Empty State -->
+      <div class="empty-state hidden" id="emptyStateAll">
+        <div class="empty-state-icon">📝</div>
+        <h3>No shortcuts yet</h3>
+        <p>Create your first text expansion shortcut to get started!</p>
+        <button onclick="openNewShortcutModal()">➕ Create First Shortcut</button>
       </div>
     </div>
 
-    <!-- Shortcuts Grid -->
-    <div class="shortcuts-grid" id="shortcutsGrid">
-      <!-- Cards will be dynamically inserted here -->
-    </div>
-
-    <!-- Empty State -->
-    <div class="empty-state hidden" id="emptyStateAll">
-      <div class="empty-state-icon">📝</div>
-      <h3>No shortcuts yet</h3>
-      <p>Create your first text expansion shortcut to get started!</p>
-      <button onclick="openNewShortcutModal()">➕ Create First Shortcut</button>
-    </div>
-  </div>
-
-  <!-- Tab Content: Favorites -->
-  <div class="tab-content" id="contentFav">
-    <div class="shortcuts-grid" id="favoritesGrid">
-      <!-- Favorite cards will be dynamically inserted here -->
-    </div>
-
-    <div class="empty-state hidden" id="emptyStateFav">
-      <div class="empty-state-icon">⭐</div>
-      <h3>No favorites yet</h3>
-      <p>Star your frequently used shortcuts to add them to favorites!</p>
-    </div>
-  </div>
-
-  <!-- Tab Content: Import -->
-  <div class="tab-content" id="contentImport">
-    <div class="import-section">
-      <h2 class="mb-2">📥 Bulk Import Shortcuts</h2>
-      <p class="form-help mb-3">
-        Import multiple shortcuts at once using CSV or JSON format. 
-        Existing shortcuts with matching names will be updated.
-      </p>
-
-      <!-- Import Mode Selector -->
-      <div class="import-mode-selector">
-        <div class="mode-option active" data-mode="csv" onclick="selectImportMode('csv')">
-          <div class="mode-option-title">📊 CSV Format</div>
-          <div class="mode-option-desc">Comma-separated values</div>
-        </div>
-        <div class="mode-option" data-mode="json" onclick="selectImportMode('json')">
-          <div class="mode-option-title">🔧 JSON Format</div>
-          <div class="mode-option-desc">JavaScript Object Notation</div>
-        </div>
+    <!-- Tab Content: Favorites -->
+    <div class="tab-content" id="contentFav">
+      <div class="shortcuts-grid" id="favoritesGrid">
+        <!-- Favorite cards will be dynamically inserted here -->
       </div>
 
-      <!-- Import Options -->
-      <div class="import-options">
-        <div class="form-group mb-0">
-          <label class="form-label">Default Application</label>
-          <input 
-            type="text" 
-            id="defaultApplication" 
-            class="form-input" 
-            placeholder="e.g., General, Email, Code">
-        </div>
-        <div class="form-group mb-0">
-          <label class="form-label">Default Language</label>
-          <input 
-            type="text" 
-            id="defaultLanguage" 
-            class="form-input" 
-            placeholder="e.g., en, es, fr">
-        </div>
+      <div class="empty-state hidden" id="emptyStateFav">
+        <div class="empty-state-icon">⭐</div>
+        <h3>No favorites yet</h3>
+        <p>Star your frequently used shortcuts to add them to favorites!</p>
       </div>
+    </div>
 
-      <!-- Import Textarea -->
-      <div class="form-group">
-        <label class="form-label">Paste CSV or JSON content:</label>
-        <textarea 
-          id="importText" 
-          class="import-textarea" 
-          placeholder="Paste your CSV or JSON data here..."></textarea>
-        <div class="form-help" id="importMeta">
-          CSV Format: Snippet Name,Content,Application,Description,Language,Tags
+    <!-- Tab Content: Import -->
+    <div class="tab-content" id="contentImport">
+      <div class="import-section">
+        <h2 class="mb-2">📥 Bulk Import Shortcuts</h2>
+        <p class="form-help mb-3">
+          Import multiple shortcuts at once using CSV or JSON format.
+          Existing shortcuts with matching names will be updated.
+        </p>
+
+        <!-- Import Mode Selector -->
+        <div class="import-mode-selector">
+          <div class="mode-option active" data-mode="csv" onclick="selectImportMode('csv')">
+            <div class="mode-option-title">📊 CSV Format</div>
+            <div class="mode-option-desc">Comma-separated values</div>
+          </div>
+          <div class="mode-option" data-mode="json" onclick="selectImportMode('json')">
+            <div class="mode-option-title">🔧 JSON Format</div>
+            <div class="mode-option-desc">JavaScript Object Notation</div>
+          </div>
         </div>
-      </div>
 
-      <!-- Import Actions -->
-      <div style="display: flex; gap: 8px;">
-        <button id="btnImport" onclick="runImport()">
-          📥 Import Shortcuts
-        </button>
-        <button class="btn-secondary" onclick="clearImportForm()">
-          Clear
-        </button>
-        <button class="btn-secondary" onclick="showImportHelp()">
-          ❓ Help
-        </button>
-      </div>
+        <!-- Import Options -->
+        <div class="import-options">
+          <div class="form-group mb-0">
+            <label class="form-label">Default Application</label>
+            <input type="text" id="defaultApplication" class="form-input" placeholder="e.g., General, Email, Code">
+          </div>
+          <div class="form-group mb-0">
+            <label class="form-label">Default Language</label>
+            <input type="text" id="defaultLanguage" class="form-input" placeholder="e.g., en, es, fr">
+          </div>
+        </div>
 
-      <!-- Import Result -->
-      <div id="importResult" class="import-result"></div>
+        <!-- Import Textarea -->
+        <div class="form-group">
+          <label class="form-label">Paste CSV or JSON content:</label>
+          <textarea id="importText" class="import-textarea"
+            placeholder="Paste your CSV or JSON data here..."></textarea>
+          <div class="form-help" id="importMeta">
+            CSV Format: Snippet Name,Content,Application,Description,Language,Tags
+          </div>
+        </div>
+
+        <!-- Import Actions -->
+        <div style="display: flex; gap: 8px;">
+          <button id="btnImport" onclick="runImport()">
+            📥 Import Shortcuts
+          </button>
+          <button class="btn-secondary" onclick="clearImportForm()">
+            Clear
+          </button>
+          <button class="btn-secondary" onclick="showImportHelp()">
+            ❓ Help
+          </button>
+        </div>
+
+        <!-- Import Result -->
+        <div id="importResult" class="import-result"></div>
+      </div>
     </div>
   </div>
-</div>
 
   <!-- Modal: Edit/Create Shortcut -->
   <div class="modal-overlay" id="modalOverlay" onclick="handleModalOverlayClick(event)">
@@ -1002,12 +1024,7 @@
         <form id="shortcutForm" onsubmit="event.preventDefault(); saveShortcut();">
           <div class="form-group">
             <label class="form-label required">Snippet Name</label>
-            <input 
-              type="text" 
-              id="fKey" 
-              class="form-input" 
-              placeholder="e.g., addr, sig, meeting-template"
-              required>
+            <input type="text" id="fKey" class="form-input" placeholder="e.g., addr, sig, meeting-template" required>
             <div class="form-help">
               Unique identifier for this shortcut (max 80 characters)
             </div>
@@ -1015,11 +1032,8 @@
 
           <div class="form-group">
             <label class="form-label required">Content</label>
-            <textarea 
-              id="fExpansion" 
-              class="form-textarea" 
-              placeholder="Enter the text that will expand when you use this shortcut..."
-              required></textarea>
+            <textarea id="fExpansion" class="form-textarea"
+              placeholder="Enter the text that will expand when you use this shortcut..." required></textarea>
             <div class="form-help">
               The text that will be inserted (max 50,000 characters)
             </div>
@@ -1027,11 +1041,7 @@
 
           <div class="form-group">
             <label class="form-label">Application</label>
-            <input 
-              type="text" 
-              id="fApplication" 
-              class="form-input" 
-              placeholder="e.g., Email, Slack, Google Docs">
+            <input type="text" id="fApplication" class="form-input" placeholder="e.g., Email, Slack, Google Docs">
             <div class="form-help">
               Where this shortcut is typically used
             </div>
@@ -1039,29 +1049,18 @@
 
           <div class="form-group">
             <label class="form-label">Description</label>
-            <textarea 
-              id="fDescription" 
-              class="form-textarea" 
-              style="min-height: 80px;"
+            <textarea id="fDescription" class="form-textarea" style="min-height: 80px;"
               placeholder="Optional description of what this shortcut does..."></textarea>
           </div>
 
           <div class="form-group">
             <label class="form-label">Language</label>
-            <input 
-              type="text" 
-              id="fLanguage" 
-              class="form-input" 
-              placeholder="e.g., en, es, fr, code">
+            <input type="text" id="fLanguage" class="form-input" placeholder="e.g., en, es, fr, code">
           </div>
 
           <div class="form-group mb-0">
             <label class="form-label">Tags</label>
-            <input 
-              type="text" 
-              id="fTags" 
-              class="form-input" 
-              placeholder="e.g., work, personal, email, signature">
+            <input type="text" id="fTags" class="form-input" placeholder="e.g., work, personal, email, signature">
             <div class="form-help">
               Comma-separated tags for organization
             </div>
@@ -1115,9 +1114,90 @@
     };
 
     // ========================================================================
+    // UTILITY FUNCTIONS
+    // ========================================================================
+
+    /**
+     * Shorthand for document.getElementById
+     */
+    function el(id) {
+      return document.getElementById(id);
+    }
+
+    /**
+     * Sets the status bar to busy/loading state
+     * @param {string} message - Loading message to display
+     */
+    function setBusy(message) {
+      const statusText = el('statusText');
+      if (statusText) {
+        statusText.textContent = message || 'Loading...';
+        statusText.classList.add('loading');
+      }
+      // Disable action buttons during loading
+      const btnRefresh = el('btnRefresh');
+      const btnNew = el('btnNew');
+      if (btnRefresh) btnRefresh.disabled = true;
+      if (btnNew) btnNew.disabled = true;
+    }
+
+    /**
+     * Sets the status bar to ready state
+     * @param {string} message - Ready message to display
+     */
+    function setReady(message) {
+      const statusText = el('statusText');
+      if (statusText) {
+        statusText.textContent = message || 'Ready';
+        statusText.classList.remove('loading');
+      }
+      // Re-enable action buttons
+      const btnRefresh = el('btnRefresh');
+      const btnNew = el('btnNew');
+      if (btnRefresh) btnRefresh.disabled = false;
+      if (btnNew) btnNew.disabled = false;
+    }
+
+    /**
+     * Shows a toast notification
+     * @param {string} message - Toast message
+     * @param {string} type - Toast type: 'good', 'warn', 'bad', or default
+     */
+    function toast(message, type) {
+      const container = el('toastContainer');
+      if (!container) {
+        console.warn('[Toast] Container not found, logging instead:', message);
+        return;
+      }
+
+      const toastEl = document.createElement('div');
+      toastEl.className = 'toast ' + (type || '');
+
+      const icons = {
+        'good': '✅',
+        'warn': '⚠️',
+        'bad': '❌'
+      };
+      const icon = icons[type] || 'ℹ️';
+
+      toastEl.innerHTML = `
+        <span class="toast-icon">${icon}</span>
+        <span class="toast-message">${message}</span>
+      `;
+
+      container.appendChild(toastEl);
+
+      // Auto-remove after 4 seconds
+      setTimeout(() => {
+        toastEl.style.animation = 'toastSlideIn 0.3s ease-out reverse';
+        setTimeout(() => toastEl.remove(), 300);
+      }, 4000);
+    }
+
+    // ========================================================================
     // UI LAYOUT SYNC (Fixed Header Height Management)
     // ========================================================================
-    
+
     /**
      * Syncs the top bar height to CSS variable for proper content offset
      */
@@ -1136,7 +1216,7 @@
     function setupResizeObserver() {
       const topBar = document.querySelector('.top-bar');
       if (!topBar) return;
-      
+
       // Use ResizeObserver if available, fallback to window resize
       if (typeof ResizeObserver !== 'undefined') {
         const observer = new ResizeObserver(() => {
@@ -1152,7 +1232,7 @@
     // ========================================================================
     // INITIALIZATION & REFRESH
     // ========================================================================
-    window.onload = function() {
+    window.onload = function () {
       syncTopBarHeight();
       setupResizeObserver();
       // Initialize app and start data fetch
@@ -1178,7 +1258,7 @@
       state.userEmail = data.userEmail || '';
       state.version = data.version || '';
       state.favorites = Array.isArray(data.favorites) ? data.favorites : [];
-      
+
       el('userEmail').textContent = state.userEmail || 'Not signed in';
       el('versionBadge').textContent = `v${state.version}`;
 
@@ -1191,14 +1271,14 @@
         console.warn('[refreshData] Fetch already in progress, ignoring.');
         return;
       }
-      
+
       setBusy('Creating snapshot...');
       state.isFetching = true;
       state.shortcuts = [];
       state.offset = 0;
       state.hasMore = false;
       state.snapshotToken = null;
-      
+
       if (showToast) toast('Refreshing data...', 'good');
 
       google.script.run
@@ -1217,7 +1297,7 @@
 
       state.snapshotToken = res.snapshotToken;
       state.totalExpected = res.total || 0;
-      
+
       const newItems = Array.isArray(res.shortcuts) ? res.shortcuts : [];
       state.shortcuts = normalizeDataset(newItems);
       state.offset = res.offset || newItems.length;
@@ -1262,10 +1342,10 @@
           const newItems = Array.isArray(res.shortcuts) ? res.shortcuts : [];
           const cleanNewItems = normalizeDataset(newItems);
           state.shortcuts = state.shortcuts.concat(cleanNewItems);
-          
+
           state.offset = res.offset;
           state.hasMore = res.hasMore;
-          
+
           updateStatusCount();
           renderImmediate();
 
@@ -1360,10 +1440,10 @@
         cancelAnimationFrame(renderAnimationFrameId);
         renderAnimationFrameId = null;
       }
-      
+
       renderFavoritesGrid(); // Favorites are few, render instantly
       updateEmptyStates();
-      
+
       // Start chunked render for main grid
       startChunkedRender();
     }
@@ -1371,11 +1451,11 @@
     function startChunkedRender() {
       const grid = el('shortcutsGrid');
       const filtered = getFilteredShortcuts();
-      
+
       // Clear current content
       // OPTIMIZATION: If we implement a diff engine, that's better, but for now full re-render is safer for correctness.
       grid.innerHTML = '';
-      
+
       if (filtered.length === 0) return;
 
       // Initialize queue
@@ -1385,7 +1465,7 @@
       function renderNextChunk() {
         const chunkEnd = Math.min(currentIndex + CONFIG.RENDER_CHUNK_SIZE, renderQueue.length);
         const fragment = document.createDocumentFragment();
-        
+
         for (let i = currentIndex; i < chunkEnd; i++) {
           const item = renderQueue[i];
           const div = document.createElement('div');
@@ -1396,10 +1476,10 @@
           // createShortcutCard returns the string for .shortcut-card. 
           // So div.firstElementChild is the card.
           if (div.firstElementChild) {
-             fragment.appendChild(div.firstElementChild);
+            fragment.appendChild(div.firstElementChild);
           }
         }
-        
+
         grid.appendChild(fragment);
         currentIndex = chunkEnd;
 
@@ -1422,7 +1502,7 @@
     function renderFavoritesGrid() {
       const grid = el('favoritesGrid');
       const favorites = state.shortcuts.filter(s => s.favorite);
-      
+
       if (favorites.length === 0) {
         grid.innerHTML = '';
         return;
@@ -1439,7 +1519,7 @@
       const applicationHtml = escapeHtml(shortcut.application || '');
       const languageHtml = escapeHtml(shortcut.language || '');
       const favoriteClass = shortcut.favorite ? 'active' : '';
-      
+
       return `
         <div class="shortcut-card" onclick="editShortcut(decodeURIComponent('${keyEncoded}'))">
           <div class="shortcut-card-header">
@@ -1491,7 +1571,7 @@
       // Apply search filter
       if (state.searchQuery) {
         const query = state.searchQuery.toLowerCase();
-        filtered = filtered.filter(s => 
+        filtered = filtered.filter(s =>
           s.key.toLowerCase().includes(query) ||
           s.expansion.toLowerCase().includes(query) ||
           (s.tags && s.tags.toLowerCase().includes(query)) ||
@@ -1544,12 +1624,12 @@
 
     function handleFilterClick(chip, filter) {
       state.filterMode = filter;
-      
+
       document.querySelectorAll('.filter-chips .chip').forEach(c => {
         c.classList.remove('active');
       });
       chip.classList.add('active');
-      
+
       render();
     }
 
@@ -1710,7 +1790,7 @@
     // ========================================================================
     // FAVORITES - FIXED WITH EVENT HANDLERS
     // ========================================================================
-    
+
     /**
      * 🔥 FIX #1: Star button handler with event.stopPropagation()
      * This prevents the card click event from firing when clicking the star
@@ -1790,7 +1870,7 @@
     // ========================================================================
     // COPY TO CLIPBOARD - FIXED WITH PROPER HANDLER
     // ========================================================================
-    
+
     /**
      * 🔥 FIX #2: Copy to clipboard with event.stopPropagation() and proper clipboard API
      * Uses modern Clipboard API with fallback to execCommand
@@ -1799,7 +1879,7 @@
       // CRITICAL: Stop event from bubbling to card click handler
       event.stopPropagation();
       event.preventDefault();
-      
+
       const shortcut = state.shortcuts.find(s => s.key === key);
       if (!shortcut) {
         toast('Shortcut not found.', 'bad');
@@ -1807,7 +1887,7 @@
       }
 
       const textToCopy = shortcut.expansion;
-      
+
       // Visual feedback
       const btn = event.currentTarget;
       const originalHtml = btn.innerHTML;
@@ -1819,7 +1899,7 @@
           .then(() => {
             console.log(`Copied "${key}" to clipboard via Clipboard API`);
             toast(`Copied "${key}" to clipboard! 📋`, 'good');
-            
+
             // Log the copy action AND auto-favorite
             google.script.run
               .withSuccessHandler((res) => {
@@ -1835,7 +1915,7 @@
               })
               .withFailureHandler((err) => console.warn('[copyToClipboard] Log failed:', err))
               .handleClipboardFavorite(key);
-            
+
             // Reset button icon
             setTimeout(() => { btn.innerHTML = originalHtml; }, 1000);
           })
@@ -1862,17 +1942,17 @@
       textarea.style.opacity = '0';
       textarea.style.pointerEvents = 'none';
       document.body.appendChild(textarea);
-      
+
       try {
         textarea.select();
         textarea.setSelectionRange(0, 99999); // For mobile devices
-        
+
         const successful = document.execCommand('copy');
-        
+
         if (successful) {
           console.log(`Copied "${key}" to clipboard via execCommand`);
           toast(`Copied "${key}" to clipboard! 📋`, 'good');
-          
+
           // Log the copy action AND auto-favorite
           google.script.run
             .withSuccessHandler((res) => {
@@ -1904,13 +1984,13 @@
         console.warn('[refreshData] Fetch already in progress, ignoring.');
         return;
       }
-      
+
       setBusy('Loading shortcuts...');
       state.isFetching = true;
       state.shortcuts = []; // Clear existing
       state.offset = 0;
       state.hasMore = false;
-      
+
       if (showToast) toast('Refreshing data...', 'good');
 
       google.script.run
@@ -1925,7 +2005,7 @@
      */
     function refreshDataSilent() {
       if (state.isFetching) return;
-      
+
       console.log('[refreshDataSilent] Starting background sync...');
       state.isFetching = true;
       // Note: For silent refresh, we might want to keep existing data visible until new data arrives
@@ -1933,7 +2013,7 @@
       // Ideally, we'd fetch into a temp buffer and swap, but let's stick to the main pattern.
       state.shortcuts = [];
       state.offset = 0;
-      
+
       google.script.run
         .withSuccessHandler(handleBootstrapSuccess)
         .withFailureHandler((err) => {
@@ -1948,12 +2028,12 @@
     // ========================================================================
     function selectImportMode(mode) {
       state.importMode = mode;
-      
+
       document.querySelectorAll('.mode-option').forEach(opt => {
         opt.classList.remove('active');
       });
       document.querySelector(`.mode-option[data-mode="${mode}"]`).classList.add('active');
-      
+
       updateImportMeta();
     }
 
@@ -2061,4 +2141,5 @@ sig,"Best regards,\nJohn Doe",Email,Email signature,en,signature`;
     }
   </script>
 </body>
+
 </html>
