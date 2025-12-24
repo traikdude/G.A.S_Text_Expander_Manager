@@ -1194,6 +1194,21 @@
       }, 4000);
     }
 
+    /**
+     * Escapes HTML special characters to prevent XSS
+     * @param {string} str - String to escape
+     * @return {string} HTML-safe string
+     */
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     // ========================================================================
     // UI LAYOUT SYNC (Fixed Header Height Management)
     // ========================================================================
