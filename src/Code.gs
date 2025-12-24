@@ -807,6 +807,28 @@ function testCacheAndSnapshotIntegrity() {
 }
 
 /**
+ * 🔬 DIAGNOSTIC: Verify Active Configuration
+ * Run this from GAS Editor to confirm deployed values
+ */
+function verifyActiveConfig() {
+  const diagnostics = {
+    configValue: CFG.INITIAL_PAGE_SIZE,
+    timestamp: new Date().toISOString(),
+    scriptId: ScriptApp.getScriptId(),
+    environment: Session.getEffectiveUser().getEmail()
+  };
+
+  Logger.log("═══ ACTIVE CONFIG VERIFICATION ═══");
+  Logger.log("INITIAL_PAGE_SIZE: " + diagnostics.configValue);
+  Logger.log("Script ID: " + diagnostics.scriptId);
+  Logger.log("Timestamp: " + diagnostics.timestamp);
+  Logger.log("User: " + diagnostics.environment);
+  Logger.log("═══════════════════════════════════");
+
+  return diagnostics;
+}
+
+/**
  * SMOKE TEST: Validates paging determinism and snapshot integrity.
  * Run via: clasp run testPagingDeterminism
  */
