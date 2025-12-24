@@ -943,3 +943,59 @@ function testPageSizePerformance() {
     return { success: false, error: err.message };
   }
 }
+
+// ============================================================================
+// DIAGNOSTIC: Verify Active Configuration (for deployment debugging)
+// Run via GAS Editor: Run → verifyActiveConfig, then View → Logs
+// ============================================================================
+
+/**
+ * Diagnostic function to verify the active configuration.
+ * Use this to confirm which version of code is running on the deployed Web App.
+ * @return {Object} Current configuration and environment info
+ */
+function verifyActiveConfig() {
+  const diagnostics = {
+    timestamp: new Date().toISOString(),
+    config: {
+      INITIAL_PAGE_SIZE: CFG.INITIAL_PAGE_SIZE,
+      SNAPSHOT_TTL_SECONDS: CFG.SNAPSHOT_TTL_SECONDS,
+      DEBUG_MODE: CFG.DEBUG_MODE,
+      CACHE_TTL_SECONDS: CFG.CACHE_TTL_SECONDS
+    },
+    environment: {
+      scriptId: ScriptApp.getScriptId(),
+      timezone: Session.getScriptTimeZone(),
+      userEmail: getUserEmail_() || 'unknown'
+    },
+    verification: {
+      expectedPageSize: 1000,
+      actualPageSize: CFG.INITIAL_PAGE_SIZE,
+      isCorrect: CFG.INITIAL_PAGE_SIZE === 1000
+    }
+  };
+
+  // Log for easy reading in GAS Editor
+  console.log('═══════════════════════════════════════════════════════════');
+  console.log('   🔍 ACTIVE CONFIGURATION DIAGNOSTICS');
+  console.log('═══════════════════════════════════════════════════════════');
+  console.log('Timestamp:', diagnostics.timestamp);
+  console.log('');
+  console.log('📊 CONFIG VALUES:');
+  console.log('   INITIAL_PAGE_SIZE:', CFG.INITIAL_PAGE_SIZE);
+  console.log('   SNAPSHOT_TTL_SECONDS:', CFG.SNAPSHOT_TTL_SECONDS);
+  console.log('   DEBUG_MODE:', CFG.DEBUG_MODE);
+  console.log('');
+  console.log('🔧 ENVIRONMENT:');
+  console.log('   Script ID:', ScriptApp.getScriptId());
+  console.log('   Timezone:', Session.getScriptTimeZone());
+  console.log('');
+  console.log('✅ VERIFICATION:');
+  console.log('   Expected INITIAL_PAGE_SIZE: 1000');
+  console.log('   Actual INITIAL_PAGE_SIZE:', CFG.INITIAL_PAGE_SIZE);
+  console.log('   Status:', diagnostics.verification.isCorrect ? '✅ CORRECT' : '❌ MISMATCH - REDEPLOYMENT NEEDED');
+  console.log('═══════════════════════════════════════════════════════════');
+
+  return diagnostics;
+}
+
