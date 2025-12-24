@@ -1303,24 +1303,35 @@
     }
 
     function handleSnapshotCreated(res) {
+      console.log('[handleSnapshotCreated] Called with:', res ? 'response object' : 'null/undefined');
+
       if (!res || !res.ok) {
         console.error('[handleSnapshotCreated] Failed', res);
         state.isFetching = false;
         toast('Failed to create data snapshot.', 'bad');
+        setReady('Load failed');
         return;
       }
 
+      console.log('[handleSnapshotCreated] Response OK, processing...');
       state.snapshotToken = res.snapshotToken;
       state.totalExpected = res.total || 0;
 
       const newItems = Array.isArray(res.shortcuts) ? res.shortcuts : [];
+      console.log('[handleSnapshotCreated] Received', newItems.length, 'items');
+
       state.shortcuts = normalizeDataset(newItems);
+      console.log('[handleSnapshotCreated] After normalize:', state.shortcuts.length, 'items');
+
       state.offset = res.offset || newItems.length;
       state.hasMore = res.hasMore;
 
       if (CONFIG.DEBUG) console.log(`[Snapshot] Token: ${state.snapshotToken}, Total: ${state.totalExpected}, Initial: ${newItems.length}`);
 
+      console.log('[handleSnapshotCreated] Calling updateStatusCount...');
       updateStatusCount();
+
+      console.log('[handleSnapshotCreated] Calling renderImmediate...');
       renderImmediate();
 
       if (state.hasMore) {

@@ -999,3 +999,200 @@ function verifyActiveConfig() {
   return diagnostics;
 }
 
+// ============================================================================
+// DIAGNOSTIC: Full Pipeline Test (for debugging loading failures)
+// Run via GAS Editor: Run → testFullPipeline, then View → Logs
+// ============================================================================
+
+/**
+ * Comprehensive diagnostic that tests every layer of the data loading pipeline.
+ * This helps identify exactly where a loading failure occurs.
+ * @return {Object} Detailed diagnostic results
+ */
+function testFullPipeline() {
+  console.log('');
+  console.log('╔═══════════════════════════════════════════════════════════════════════════════╗');
+  console.log('║ 🔧 FULL PIPELINE DIAGNOSTIC TEST                                              ║');
+  console.log('╚═══════════════════════════════════════════════════════════════════════════════╝');
+  console.log('');
+  
+  const results = {
+    timestamp: new Date().toISOString(),
+    steps: [],
+    passed: 0,
+    failed: 0,
+    finalStatus: 'UNKNOWN'
+  };
+  
+  function logStep(step, status, details) {
+    const icon = status === 'PASS' ? '✅' : (status === 'FAIL' ? '❌' : '⚠️');
+    console.log(`${icon} STEP ${step.num}: ${step.name}`);
+    if (details) console.log(`   ${details}`);
+    results.steps.push({ ...step, status, details });
+    if (status === 'PASS') results.passed++;
+    if (status === 'FAIL') results.failed++;
+  }
+  
+  // STEP 1: Configuration Check
+  try {
+    const step1 = { num: 1, name: 'Configuration Values' };
+    const configOk = CFG.INITIAL_PAGE_SIZE === 1000;
+    logStep(step1, configOk ? 'PASS' : 'FAIL', 
+      `INITIAL_PAGE_SIZE=${CFG.INITIAL_PAGE_SIZE}, Expected=1000`);
+  } catch (e) {
+    logStep({ num: 1, name: 'Configuration Values' }, 'FAIL', e.message);
+  }
+  
+  // STEP 2: Sheet Access
+  let shortcutsSheet = null;
+  try {
+    const step2 = { num: 2, name: 'Shortcuts Sheet Access' };
+    shortcutsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CFG.SHEET_SHORTCUTS);
+    if (shortcutsSheet) {
+      logStep(step2, 'PASS', `Sheet "${CFG.SHEET_SHORTCUTS}" found`);
+    } else {
+      logStep(step2, 'FAIL', `Sheet "${CFG.SHEET_SHORTCUTS}" NOT FOUND`);
+    }
+  } catch (e) {
+    logStep({ num: 2, name: 'Shortcuts Sheet Access' }, 'FAIL', e.message);
+  }
+  
+  // STEP 3: Read Data From Sheet
+  let allData = [];
+  try {
+    const step3 = { num: 3, name: 'Read Data From Sheet' };
+    allData = getShortcutsFromSheet_();
+    logStep(step3, 'PASS', `Read ${allData.length} shortcuts from sheet`);
+  } catch (e) {
+    logStep({ num: 3, name: 'Read Data From Sheet' }, 'FAIL', e.message);
+  }
+  
+  // STEP 4: Data Integrity Check
+  try {
+    const step4 = { num: 4, name: 'Data Integrity Check' };
+    if (allData.length === 0) {
+      logStep(step4, 'WARN', 'No shortcuts found in sheet - is the sheet empty?');
+    } else {
+      const sample = allData[0];
+      const hasKey = sample && sample.key;
+      const hasExpansion = sample && sample.expansion;
+      logStep(step4, hasKey && hasExpansion ? 'PASS' : 'FAIL',
+        `Sample: key="${sample?.key?.substring(0,20)}...", hasExpansion=${!!hasExpansion}`);
+    }
+  } catch (e) {
+    logStep({ num: 4, name: 'Data Integrity Check' }, 'FAIL', e.message);
+  }
+  
+  // STEP 5: Cache Service Available
+  try {
+    const step5 = { num: 5, name: 'CacheService Available' };
+    const cache = CacheService.getScriptCache();
+    cache.put('TEST_KEY', 'TEST_VALUE', 60);
+    const retrieved = cache.get('TEST_KEY');
+    cache.remove('TEST_KEY');
+    logStep(step5, retrieved === 'TEST_VALUE' ? 'PASS' : 'FAIL',
+      `Write/Read test: ${retrieved === 'TEST_VALUE' ? 'Success' : 'Failed'}`);
+  } catch (e) {
+    logStep({ num: 5, name: 'CacheService Available' }, 'FAIL', e.message);
+  }
+  
+  // STEP 6: Snapshot Creation
+  let snapshotMeta = null;
+  try {
+    const step6 = { num: 6, name: 'Snapshot Creation' };
+    snapshotMeta = beginShortcutsSnapshot();
+    logStep(step6, snapshotMeta && snapshotMeta.snapshotToken ? 'PASS' : 'FAIL',
+      `Token: ${snapshotMeta?.snapshotToken?.substring(0,8)}..., Total: ${snapshotMeta?.total}`);
+  } catch (e) {
+    logStep({ num: 6, name: 'Snapshot Creation' }, 'FAIL', e.message);
+  }
+  
+  // STEP 7: Fetch First Page
+  let firstPage = null;
+  try {
+    const step7 = { num: 7, name: 'Fetch First Page' };
+    if (snapshotMeta && snapshotMeta.snapshotToken) {
+      firstPage = fetchSnapshotPage_(snapshotMeta.snapshotToken, 0, CFG.INITIAL_PAGE_SIZE);
+      if (firstPage && firstPage.items) {
+        logStep(step7, 'PASS',
+          `Fetched ${firstPage.items.length} items, hasMore=${firstPage.hasMore}`);
+      } else if (firstPage && firstPage.error) {
+        logStep(step7, 'FAIL', `Error: ${firstPage.error}`);
+      } else {
+        logStep(step7, 'FAIL', 'Unknown response format');
+      }
+    } else {
+      logStep(step7, 'FAIL', 'No snapshot token available from Step 6');
+    }
+  } catch (e) {
+    logStep({ num: 7, name: 'Fetch First Page' }, 'FAIL', e.message);
+  }
+  
+  // STEP 8: Payload Size Check
+  try {
+    const step8 = { num: 8, name: 'Payload Size Check' };
+    if (firstPage && firstPage.items) {
+      const jsonSize = JSON.stringify(firstPage).length;
+      const sizeKB = (jsonSize / 1024).toFixed(2);
+      const isOk = jsonSize < 500000; // 500KB safe limit
+      logStep(step8, isOk ? 'PASS' : 'WARN',
+        `First page JSON size: ${sizeKB}KB (${isOk ? 'OK' : 'May be too large'})`);
+    } else {
+      logStep(step8, 'FAIL', 'No first page data to measure');
+    }
+  } catch (e) {
+    logStep({ num: 8, name: 'Payload Size Check' }, 'FAIL', e.message);
+  }
+  
+  // STEP 9: UI Handler Test
+  try {
+    const step9 = { num: 9, name: 'beginShortcutsSnapshotHandler Test' };
+    const result = beginShortcutsSnapshotHandler();
+    if (result && result.ok) {
+      logStep(step9, 'PASS',
+        `Handler returned ok=true, ${result.shortcuts?.length} shortcuts, hasMore=${result.hasMore}`);
+    } else {
+      logStep(step9, 'FAIL', `Handler failed: ${result?.message || 'Unknown error'}`);
+    }
+  } catch (e) {
+    logStep({ num: 9, name: 'beginShortcutsSnapshotHandler Test' }, 'FAIL', e.message);
+  }
+  
+  // STEP 10: Favorites Access
+  try {
+    const step10 = { num: 10, name: 'Favorites Access' };
+    const favs = listMyFavorites_();
+    logStep(step10, 'PASS', `Retrieved ${favs.length} favorites for current user`);
+  } catch (e) {
+    logStep({ num: 10, name: 'Favorites Access' }, 'FAIL', e.message);
+  }
+  
+  // FINAL SUMMARY
+  console.log('');
+  console.log('╔═══════════════════════════════════════════════════════════════════════════════╗');
+  console.log('║ 📊 DIAGNOSTIC SUMMARY                                                         ║');
+  console.log('╚═══════════════════════════════════════════════════════════════════════════════╝');
+  console.log(`   ✅ Passed: ${results.passed}`);
+  console.log(`   ❌ Failed: ${results.failed}`);
+  console.log(`   ⚠️  Warnings: ${results.steps.filter(s => s.status === 'WARN').length}`);
+  console.log('');
+  
+  if (results.failed === 0) {
+    results.finalStatus = 'ALL TESTS PASSED';
+    console.log('🎉 ALL TESTS PASSED - Server-side pipeline is healthy!');
+    console.log('   If the UI still shows "Loading...", the issue is likely:');
+    console.log('   1. Stale Web App deployment (redeploy via GAS Editor)');
+    console.log('   2. Browser cache (hard refresh with Ctrl+Shift+R)');
+    console.log('   3. Client-side JavaScript error (check browser console)');
+  } else {
+    results.finalStatus = 'TESTS FAILED';
+    console.log('🔴 SOME TESTS FAILED - Review the failures above.');
+    console.log('   Focus on the FIRST failed step - later failures may be cascading.');
+  }
+  
+  console.log('═══════════════════════════════════════════════════════════════════════════════');
+  
+  return results;
+}
+
+
