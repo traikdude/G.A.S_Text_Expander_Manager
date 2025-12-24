@@ -1104,7 +1104,10 @@
       hasMore: false,
       offset: 0,
       totalExpected: 0,
-      snapshotToken: null
+      snapshotToken: null,
+      // Initialization guards
+      isInitializing: false,
+      bootstrapReceived: false
     };
 
     const CONFIG = {
@@ -1255,6 +1258,14 @@
     };
 
     function initializeApp() {
+      // Guard against duplicate initialization
+      if (state.isInitializing || state.loaded) {
+        console.warn('[initializeApp] Already initializing or loaded, skipping');
+        return;
+      }
+
+      state.isInitializing = true;
+      console.log('[initializeApp] Starting initialization...');
       setBusy('Initializing...');
       google.script.run
         .withSuccessHandler(handleBootstrapSuccess)
@@ -1263,30 +1274,50 @@
     }
 
     function handleBootstrapSuccess(data) {
+      console.log('[handleBootstrapSuccess] Called with data:', data ? 'object' : 'null');
+
+      // Guard against duplicate callbacks
+      if (state.bootstrapReceived) {
+        console.warn('[handleBootstrapSuccess] Already received bootstrap, ignoring duplicate');
+        return;
+      }
+      state.bootstrapReceived = true;
+
       if (!data || !data.ok) {
+        console.error('[handleBootstrapSuccess] Data check failed', data);
         state.loaded = true;
         toast('Failed to load data.', 'bad');
         setReady('Load failed');
         return;
       }
 
+      console.log('[handleBootstrapSuccess] Data OK, processing...');
       state.userEmail = data.userEmail || '';
       state.version = data.version || '';
       state.favorites = Array.isArray(data.favorites) ? data.favorites : [];
 
+      console.log('[handleBootstrapSuccess] Setting email and version...');
       el('userEmail').textContent = state.userEmail || 'Not signed in';
       el('versionBadge').textContent = `v${state.version}`;
 
-      // Start Snapshot Fetch
-      refreshData(false);
+      try {
+        console.log('[handleBootstrapSuccess] About to call refreshData...');
+        refreshData(false);
+        console.log('[handleBootstrapSuccess] refreshData returned normally');
+      } catch (e) {
+        console.error('[handleBootstrapSuccess] ERROR calling refreshData:', e);
+      }
     }
 
     function refreshData(showToast) {
+      console.log('[refreshData] Called, showToast=', showToast);
+
       if (state.isFetching) {
         console.warn('[refreshData] Fetch already in progress, ignoring.');
         return;
       }
 
+      console.log('[refreshData] Starting snapshot fetch...');
       setBusy('Creating snapshot...');
       state.isFetching = true;
       state.shortcuts = [];
@@ -1296,10 +1327,19 @@
 
       if (showToast) toast('Refreshing data...', 'good');
 
+      console.log('[refreshData] Calling beginShortcutsSnapshotHandler via google.script.run...');
       google.script.run
-        .withSuccessHandler(handleSnapshotCreated)
-        .withFailureHandler(handleBootstrapFailure)
+        .withSuccessHandler(function (res) {
+          console.log('[refreshData] SUCCESS callback received!', res ? 'has response' : 'null');
+          handleSnapshotCreated(res);
+        })
+        .withFailureHandler(function (err) {
+          console.error('[refreshData] FAILURE callback received!', err);
+          handleBootstrapFailure(err);
+        })
         .beginShortcutsSnapshotHandler();
+
+      console.log('[refreshData] google.script.run call initiated (async)');
     }
 
     function handleSnapshotCreated(res) {
@@ -2005,25 +2045,7 @@
       }
     }
 
-    function refreshData(showToast) {
-      if (state.isFetching) {
-        console.warn('[refreshData] Fetch already in progress, ignoring.');
-        return;
-      }
-
-      setBusy('Loading shortcuts...');
-      state.isFetching = true;
-      state.shortcuts = []; // Clear existing
-      state.offset = 0;
-      state.hasMore = false;
-
-      if (showToast) toast('Refreshing data...', 'good');
-
-      google.script.run
-        .withSuccessHandler(handleBootstrapSuccess)
-        .withFailureHandler(handleBootstrapFailure)
-        .getAppBootstrapData();
-    }
+    // NOTE: The main refreshData function is defined earlier in the file (line ~1312) with proper snapshot handling
 
     /**
      * Silent background refresh - updates data without UI feedback.

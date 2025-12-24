@@ -37,7 +37,7 @@ const CFG = {
   MAX_LANGUAGE_LEN: 64,
   MAX_APP_LEN: 128,
   MAX_DESC_LEN: 2000,
-  INITIAL_PAGE_SIZE: 1000, // Throttled for reliable google.script.run transport (2025-12-23)
+  INITIAL_PAGE_SIZE: 200, // Reduced further - 1000 exceeded callback payload limit (2025-12-23)
   DEBUG_MODE: true,
   SNAPSHOT_TTL_SECONDS: 60 * 5 // 5 min snapshot cache
 };
