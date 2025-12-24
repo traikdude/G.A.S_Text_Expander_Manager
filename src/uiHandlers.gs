@@ -56,6 +56,7 @@ function beginShortcutsSnapshotHandler() {
     const favSet = new Set(favorites.map(f => f.key));
     
     batch.items = batch.items.map(s => ({
+      id: s.id,
       key: s.key,
       expansion: s.expansion,
       application: s.application,
@@ -102,6 +103,7 @@ function fetchShortcutsBatch(snapshotToken, offset, limit) {
     const favSet = new Set(favorites.map(f => f.key));
 
     const mapped = batch.items.map(s => ({
+      id: s.id,
       key: s.key,
       expansion: s.expansion,
       application: s.application,

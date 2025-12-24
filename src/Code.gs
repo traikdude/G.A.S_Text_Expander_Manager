@@ -43,6 +43,7 @@ const CFG = {
 };
 
 const HEADERS_SHORTCUTS = [
+  'ID',
   'Snippet Name',
   'Content',
   'Application',
@@ -257,6 +258,7 @@ function getShortcutsHeaderAndColMap_(sheet) {
   return {
     header,
     col: {
+      id: idx['ID'],
       key: idx['Snippet Name'],
       expansion: idx['Content'],
       application: idx['Application'],
@@ -279,7 +281,11 @@ function getShortcutsFromSheet_() {
   const header = data[0];
   const idx = indexHeader_(header);
 
+  // Check if ID column exists (for migration compatibility)
+  const hasIdColumn = idx['ID'] !== undefined;
+  
   const col = {
+    id: hasIdColumn ? idx['ID'] : -1,
     key: idx['Snippet Name'],
     expansion: idx['Content'],
     application: idx['Application'],
@@ -290,17 +296,19 @@ function getShortcutsFromSheet_() {
   };
 
   const out = [];
-  const seenKeys = new Set();
   
+  // NO DEDUPLICATION - return ALL rows with unique IDs
   for (let i = 1; i < data.length; i++) {
     const key = String(data[i][col.key] || '').trim();
     if (!key) continue;
     
-    // Deduplicate: Keep the first occurrence only
-    if (seenKeys.has(key)) continue;
-    seenKeys.add(key);
+    // Generate a row-based ID if no ID column exists yet
+    const id = hasIdColumn && data[i][col.id] 
+      ? String(data[i][col.id]) 
+      : `ROW-${i + 1}`;
 
     out.push({
+      id,
       key,
       expansion: String(data[i][col.expansion] || ''),
       application: String(data[i][col.application] || ''),
@@ -1195,4 +1203,519 @@ function testFullPipeline() {
   return results;
 }
 
+// ============================================================================
+// DIAGNOSTIC: Analyze Raw vs Unique Shortcuts (Missing Data Investigation)
+// Run via GAS Editor: Run → diagnoseShortcutCount, then View → Logs
+// ============================================================================
+
+/**
+ * FIX COLUMN MISALIGNMENT: Rotate columns B, C, D to correct positions
+ * 
+ * Current (Wrong):
+ *   Column B (Snippet Name): Contains expansion text (should be in Content)
+ *   Column C (Content): Contains category (should be in Application)
+ *   Column D (Application): Contains trigger phrase (should be in Snippet Name)
+ * 
+ * After Fix:
+ *   Column B (Snippet Name): trigger phrase (e.g., "dates")
+ *   Column C (Content): expansion text (e.g., "0️⃣1️⃣/2️⃣0️⃣2️⃣6️⃣")
+ *   Column D (Application): category (e.g., "english")
+ */
+function fixColumnMisalignment() {
+  console.log('');
+  console.log('╔═══════════════════════════════════════════════════════════════════════════════╗');
+  console.log('║ 🔧 FIX COLUMN MISALIGNMENT                                                    ║');
+  console.log('╚═══════════════════════════════════════════════════════════════════════════════╝');
+  
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CFG.SHEET_SHORTCUTS);
+  if (!sheet) {
+    console.log('❌ ERROR: Shortcuts sheet not found!');
+    return { error: 'Sheet not found' };
+  }
+  
+  const lastRow = sheet.getLastRow();
+  const numDataRows = lastRow - 1;
+  
+  if (numDataRows <= 0) {
+    console.log('❌ ERROR: No data rows found!');
+    return { error: 'No data' };
+  }
+  
+  console.log(`📊 Processing ${numDataRows} rows...`);
+  
+  // Read columns B, C, D (indices 2, 3, 4 in 1-based)
+  const colB = sheet.getRange(2, 2, numDataRows, 1).getValues(); // B = Current expansion (should be Snippet Name)
+  const colC = sheet.getRange(2, 3, numDataRows, 1).getValues(); // C = Current category (should be Content)
+  const colD = sheet.getRange(2, 4, numDataRows, 1).getValues(); // D = Current trigger (should be Application)
+  
+  // PREVIEW: Show what will change
+  console.log('');
+  console.log('📋 PREVIEW (First 3 rows):');
+  for (let i = 0; i < 3 && i < numDataRows; i++) {
+    console.log(`Row ${i + 2}:`);
+    console.log(`  B (Snippet Name): "${String(colD[i][0]).substring(0, 30)}" ← was in D`);
+    console.log(`  C (Content): "${String(colB[i][0]).substring(0, 30)}" ← was in B`);
+    console.log(`  D (Application): "${String(colC[i][0]).substring(0, 20)}" ← was in C`);
+  }
+  
+  // Create rotated data:
+  // New B (Snippet Name) = Old D (trigger phrase)
+  // New C (Content) = Old B (expansion text)
+  // New D (Application) = Old C (category)
+  const newColB = colD.map(row => [row[0]]);  // D → B
+  const newColC = colB.map(row => [row[0]]);  // B → C
+  const newColD = colC.map(row => [row[0]]);  // C → D
+  
+  // Write the rotated data
+  console.log('');
+  console.log('✍️ Writing corrected data...');
+  
+  sheet.getRange(2, 2, numDataRows, 1).setValues(newColB); // New Snippet Name
+  sheet.getRange(2, 3, numDataRows, 1).setValues(newColC); // New Content
+  sheet.getRange(2, 4, numDataRows, 1).setValues(newColD); // New Application
+  
+  // Invalidate cache
+  invalidateShortcutsCache_();
+  bumpCacheVersion_();
+  
+  console.log('');
+  console.log('═══════════════════════════════════════════════════════════════════════════════');
+  console.log(`🎉 SUCCESS! Fixed ${numDataRows} rows`);
+  console.log('   Column B (Snippet Name): Now contains trigger phrases');
+  console.log('   Column C (Content): Now contains expansion text');
+  console.log('   Column D (Application): Now contains categories');
+  console.log('');
+  console.log('   Please refresh the web app to see correct data!');
+  console.log('═══════════════════════════════════════════════════════════════════════════════');
+  
+  return {
+    success: true,
+    rowsFixed: numDataRows
+  };
+}
+
+/**
+ * Debug function to check spreadsheet structure and sample data
+ */
+function debugSpreadsheetStructure() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CFG.SHEET_SHORTCUTS);
+  const data = sheet.getDataRange().getValues();
+  const header = data[0];
+  
+  console.log('=== SPREADSHEET HEADERS ===');
+  header.forEach((h, i) => console.log(`Column ${i} (${String.fromCharCode(65 + i)}): "${h}"`));
+  
+  // Find Content column index
+  const contentIdx = header.indexOf('Content');
+  console.log(`\nContent column index: ${contentIdx}`);
+  
+  // Sample content values from different rows
+  console.log('\n=== SAMPLE CONTENT VALUES ===');
+  const sampleRows = [1, 10, 100, 500, 1000, 2000];
+  sampleRows.forEach(rowIdx => {
+    if (rowIdx < data.length) {
+      const snippetName = String(data[rowIdx][1] || '').substring(0, 30);
+      const content = String(data[rowIdx][contentIdx] || '').substring(0, 50);
+      console.log(`Row ${rowIdx}: "${snippetName}" => Content: "${content}"`);
+    }
+  });
+  
+  // Count unique content values
+  const contentCounts = {};
+  for (let i = 1; i < data.length; i++) {
+    const content = String(data[i][contentIdx] || '').substring(0, 20);
+    contentCounts[content] = (contentCounts[content] || 0) + 1;
+  }
+  
+  console.log('\n=== TOP 10 CONTENT VALUES ===');
+  Object.entries(contentCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .forEach(([content, count]) => console.log(`  "${content}..." × ${count}`));
+  
+  return {
+    headers: header,
+    sampleRow: data[1] || [],
+    totalRows: data.length - 1
+  };
+}
+
+
+
+/**
+ * Diagnostic function to analyze why not all shortcuts are loading.
+ * Compares raw row count vs unique Snippet Names to identify duplicates.
+ * 
+ * Run this from the GAS Editor to see detailed analysis.
+ * @return {Object} Diagnostic report with counts and duplicate info
+ */
+function diagnoseShortcutCount() {
+  console.log('');
+  console.log('╔═══════════════════════════════════════════════════════════════════════════════╗');
+  console.log('║ 🔍 SHORTCUT COUNT DIAGNOSTIC                                                  ║');
+  console.log('╚═══════════════════════════════════════════════════════════════════════════════╝');
+  console.log('');
+  
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CFG.SHEET_SHORTCUTS);
+  if (!sheet) {
+    console.log('❌ ERROR: Shortcuts sheet not found!');
+    return { error: 'Sheet not found' };
+  }
+  
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  
+  console.log('📊 SHEET STATISTICS:');
+  console.log(`   Sheet Name: ${CFG.SHEET_SHORTCUTS}`);
+  console.log(`   Total Rows (including header): ${lastRow}`);
+  console.log(`   Total Data Rows: ${lastRow - 1}`);
+  console.log(`   Total Columns: ${lastCol}`);
+  console.log('');
+  
+  // Read all data
+  const data = sheet.getDataRange().getValues();
+  const header = data[0];
+  
+  // Find Snippet Name column index
+  let keyColIdx = -1;
+  for (let i = 0; i < header.length; i++) {
+    if (String(header[i]).trim() === 'Snippet Name') {
+      keyColIdx = i;
+      break;
+    }
+  }
+  
+  if (keyColIdx === -1) {
+    console.log('❌ ERROR: "Snippet Name" column not found!');
+    return { error: 'Snippet Name column not found' };
+  }
+  
+  console.log(`   Snippet Name Column Index: ${keyColIdx} (Column ${String.fromCharCode(65 + keyColIdx)})`);
+  console.log('');
+  
+  // Analyze keys
+  const allKeys = [];
+  const keyCount = {};
+  let emptyKeyRows = 0;
+  
+  for (let i = 1; i < data.length; i++) {
+    const key = String(data[i][keyColIdx] || '').trim();
+    if (!key) {
+      emptyKeyRows++;
+      continue;
+    }
+    allKeys.push(key);
+    keyCount[key] = (keyCount[key] || 0) + 1;
+  }
+  
+  const uniqueKeys = Object.keys(keyCount);
+  const duplicateKeys = uniqueKeys.filter(k => keyCount[k] > 1);
+  const totalDuplicateRows = duplicateKeys.reduce((sum, k) => sum + keyCount[k] - 1, 0);
+  
+  console.log('📈 KEY ANALYSIS:');
+  console.log(`   Total Non-Empty Keys: ${allKeys.length}`);
+  console.log(`   Unique Snippet Names: ${uniqueKeys.length}`);
+  console.log(`   Empty Key Rows (skipped): ${emptyKeyRows}`);
+  console.log('');
+  console.log('🔴 DUPLICATE ANALYSIS:');
+  console.log(`   Keys with Duplicates: ${duplicateKeys.length}`);
+  console.log(`   Extra Rows (duplicates): ${totalDuplicateRows}`);
+  console.log(`   Expected UI Display: ${uniqueKeys.length} shortcuts`);
+  console.log('');
+  
+  if (duplicateKeys.length > 0) {
+    console.log('⚠️  TOP 20 DUPLICATE KEYS:');
+    // Sort by count descending
+    const sortedDupes = duplicateKeys.sort((a, b) => keyCount[b] - keyCount[a]).slice(0, 20);
+    sortedDupes.forEach((key, idx) => {
+      console.log(`   ${idx + 1}. "${key.substring(0, 40)}${key.length > 40 ? '...' : ''}" → ${keyCount[key]} occurrences`);
+    });
+    console.log('');
+  }
+  
+  // Recommendation
+  console.log('═══════════════════════════════════════════════════════════════════════════════');
+  if (duplicateKeys.length > 0) {
+    console.log('💡 RECOMMENDATION:');
+    console.log(`   You have ${totalDuplicateRows} duplicate rows that are being filtered out.`);
+    console.log('   Run cleanupDuplicateShortcuts() to remove them and retain full data.');
+    console.log('   Or run cleanupAllDuplicates() to clean both Shortcuts and Favorites.');
+  } else {
+    console.log('✅ NO DUPLICATES FOUND');
+    console.log('   All shortcuts should be loading. Check snapshot TTL or network issues.');
+  }
+  console.log('═══════════════════════════════════════════════════════════════════════════════');
+  
+  return {
+    totalDataRows: lastRow - 1,
+    emptyKeyRows: emptyKeyRows,
+    totalNonEmptyKeys: allKeys.length,
+    uniqueKeys: uniqueKeys.length,
+    duplicateKeyCount: duplicateKeys.length,
+    duplicateRowsFiltered: totalDuplicateRows,
+    topDuplicates: duplicateKeys.slice(0, 20).map(k => ({ key: k, count: keyCount[k] })),
+    recommendation: duplicateKeys.length > 0 
+      ? 'Run cleanupDuplicateShortcuts() to remove duplicate rows'
+      : 'No duplicates found - check snapshot/cache TTL'
+  };
+}
+
+// ============================================================================
+// MIGRATION: Add ID Column to Shortcuts Sheet
+// Run ONCE via GAS Editor: Run → migrateAddIdColumn, then View → Logs
+// ============================================================================
+
+/**
+ * DIAGNOSTIC: Check for duplicate IDs in the ID column
+ * Run this to see if the ID column has duplicates
+ */
+function diagnoseDuplicateIds() {
+  console.log('');
+  console.log('╔═══════════════════════════════════════════════════════════════════════════════╗');
+  console.log('║ 🔍 DUPLICATE ID DIAGNOSTIC                                                    ║');
+  console.log('╚═══════════════════════════════════════════════════════════════════════════════╝');
+  
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CFG.SHEET_SHORTCUTS);
+  if (!sheet) {
+    console.log('❌ ERROR: Shortcuts sheet not found!');
+    return { error: 'Sheet not found' };
+  }
+  
+  const lastRow = sheet.getLastRow();
+  const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  
+  // Check if ID column exists
+  if (String(header[0] || '').trim() !== 'ID') {
+    console.log('❌ ERROR: ID column not found at position A!');
+    return { error: 'ID column not found' };
+  }
+  
+  console.log(`📊 Reading ${lastRow - 1} IDs...`);
+  
+  const idColumn = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  const idCount = {};
+  let emptyIds = 0;
+  
+  for (let i = 0; i < idColumn.length; i++) {
+    const id = String(idColumn[i][0] || '').trim();
+    if (!id) {
+      emptyIds++;
+      continue;
+    }
+    idCount[id] = (idCount[id] || 0) + 1;
+  }
+  
+  const uniqueIds = Object.keys(idCount);
+  const duplicateIds = uniqueIds.filter(id => idCount[id] > 1);
+  const totalDupeRows = duplicateIds.reduce((sum, id) => sum + idCount[id] - 1, 0);
+  
+  console.log('');
+  console.log('📈 ID ANALYSIS:');
+  console.log(`   Total Rows: ${lastRow - 1}`);
+  console.log(`   Empty IDs: ${emptyIds}`);
+  console.log(`   Unique IDs: ${uniqueIds.length}`);
+  console.log(`   IDs with Duplicates: ${duplicateIds.length}`);
+  console.log(`   Extra Duplicate Rows: ${totalDupeRows}`);
+  
+  if (duplicateIds.length > 0) {
+    console.log('');
+    console.log('⚠️  TOP 20 DUPLICATE IDs:');
+    const sorted = duplicateIds.sort((a, b) => idCount[b] - idCount[a]).slice(0, 20);
+    sorted.forEach((id, idx) => {
+      console.log(`   ${idx + 1}. "${id}" → ${idCount[id]} occurrences`);
+    });
+  }
+  
+  console.log('');
+  console.log('═══════════════════════════════════════════════════════════════════════════════');
+  if (duplicateIds.length > 0 || emptyIds > 0) {
+    console.log('💡 RECOMMENDATION: Run regenerateAllIds() to fix duplicate/missing IDs');
+  } else {
+    console.log('✅ All IDs are unique!');
+  }
+  console.log('═══════════════════════════════════════════════════════════════════════════════');
+  
+  return {
+    totalRows: lastRow - 1,
+    emptyIds,
+    uniqueIds: uniqueIds.length,
+    duplicateIdCount: duplicateIds.length,
+    duplicateRows: totalDupeRows
+  };
+}
+
+/**
+ * REGENERATE ALL IDs: Create truly unique IDs for every row
+ * Uses timestamp + row index for guaranteed uniqueness
+ */
+function regenerateAllIds() {
+  console.log('');
+  console.log('╔═══════════════════════════════════════════════════════════════════════════════╗');
+  console.log('║ 🔄 REGENERATING ALL IDs                                                       ║');
+  console.log('╚═══════════════════════════════════════════════════════════════════════════════╝');
+  
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CFG.SHEET_SHORTCUTS);
+  if (!sheet) {
+    console.log('❌ ERROR: Shortcuts sheet not found!');
+    return { error: 'Sheet not found' };
+  }
+  
+  const lastRow = sheet.getLastRow();
+  const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  
+  if (String(header[0] || '').trim() !== 'ID') {
+    console.log('❌ ERROR: ID column not found at position A!');
+    return { error: 'ID column not found' };
+  }
+  
+  const numDataRows = lastRow - 1;
+  console.log(`📊 Generating ${numDataRows} unique IDs...`);
+  
+  const timestamp = Date.now().toString(36).toUpperCase();
+  const ids = [];
+  
+  for (let i = 0; i < numDataRows; i++) {
+    // Format: SC-[timestamp]-[row padded 6 digits]
+    ids.push([`SC-${timestamp}-${String(i + 1).padStart(6, '0')}`]);
+  }
+  
+  sheet.getRange(2, 1, numDataRows, 1).setValues(ids);
+  
+  // Invalidate cache
+  invalidateShortcutsCache_();
+  bumpCacheVersion_();
+  
+  console.log('');
+  console.log('═══════════════════════════════════════════════════════════════════════════════');
+  console.log(`🎉 SUCCESS! Generated ${numDataRows} unique IDs`);
+  console.log('   Format: SC-[timestamp]-[row number]');
+  console.log('   Please refresh the web app to see all shortcuts.');
+  console.log('═══════════════════════════════════════════════════════════════════════════════');
+  
+  return {
+    success: true,
+    rowsUpdated: numDataRows,
+    sampleId: ids[0][0]
+  };
+}
+
+
+/**
+ * ONE-TIME MIGRATION: Adds an 'ID' column to the Shortcuts sheet.
+ * Inserts a new column A, names it 'ID', and generates unique IDs for all rows.
+ * 
+ * SAFE TO RUN: Will skip if ID column already exists.
+ * 
+ * @return {Object} Migration result
+ */
+function migrateAddIdColumn() {
+  console.log('');
+  console.log('╔═══════════════════════════════════════════════════════════════════════════════╗');
+  console.log('║ 🔄 MIGRATION: Adding ID Column to Shortcuts Sheet                             ║');
+  console.log('╚═══════════════════════════════════════════════════════════════════════════════╝');
+  console.log('');
+  
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(CFG.SHEET_SHORTCUTS);
+  
+  if (!sheet) {
+    console.log('❌ ERROR: Shortcuts sheet not found!');
+    return { success: false, error: 'Sheet not found' };
+  }
+  
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  
+  console.log(`📊 Current sheet: ${lastRow} rows, ${lastCol} columns`);
+  
+  // Check if ID column already exists
+  const header = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  const firstHeader = String(header[0] || '').trim();
+  
+  if (firstHeader === 'ID') {
+    console.log('✅ ID column already exists! Checking for empty IDs...');
+    
+    // Check for rows without IDs and fill them
+    const idColumn = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    let emptyCount = 0;
+    const updates = [];
+    
+    for (let i = 0; i < idColumn.length; i++) {
+      if (!idColumn[i][0]) {
+        emptyCount++;
+        updates.push([`SC-${String(i + 2).padStart(6, '0')}`]);
+      } else {
+        updates.push([idColumn[i][0]]);
+      }
+    }
+    
+    if (emptyCount > 0) {
+      console.log(`   Found ${emptyCount} rows without IDs. Filling...`);
+      sheet.getRange(2, 1, updates.length, 1).setValues(updates);
+      console.log(`   ✅ Filled ${emptyCount} missing IDs`);
+    } else {
+      console.log('   All rows already have IDs. Nothing to do.');
+    }
+    
+    return { 
+      success: true, 
+      message: 'ID column exists', 
+      emptyIdsFilled: emptyCount 
+    };
+  }
+  
+  console.log('📝 Inserting new ID column at position A...');
+  
+  // Insert new column at position A
+  sheet.insertColumnBefore(1);
+  
+  // Set header
+  sheet.getRange(1, 1).setValue('ID').setFontWeight('bold');
+  
+  console.log('🔢 Generating unique IDs for all rows...');
+  
+  // Generate IDs for all data rows
+  const numDataRows = lastRow - 1;
+  if (numDataRows > 0) {
+    const ids = [];
+    for (let i = 0; i < numDataRows; i++) {
+      // Format: SC-000001, SC-000002, etc.
+      ids.push([`SC-${String(i + 1).padStart(6, '0')}`]);
+    }
+    
+    sheet.getRange(2, 1, numDataRows, 1).setValues(ids);
+    console.log(`   ✅ Generated ${numDataRows} unique IDs`);
+  }
+  
+  // Invalidate cache since schema changed
+  invalidateShortcutsCache_();
+  bumpCacheVersion_();
+  
+  console.log('');
+  console.log('═══════════════════════════════════════════════════════════════════════════════');
+  console.log('🎉 MIGRATION COMPLETE!');
+  console.log(`   Added ID column with ${numDataRows} unique IDs`);
+  console.log('   Cache invalidated. Please refresh the web app.');
+  console.log('═══════════════════════════════════════════════════════════════════════════════');
+  
+  return {
+    success: true,
+    message: 'ID column added successfully',
+    rowsProcessed: numDataRows,
+    newColumnCount: lastCol + 1
+  };
+}
+
+/**
+ * Generates a unique ID for new shortcuts.
+ * @return {string} New unique ID in format SC-XXXXXX
+ */
+function generateShortcutId_() {
+  const sheet = getSheet_(CFG.SHEET_SHORTCUTS);
+  const lastRow = sheet.getLastRow();
+  // Use timestamp + random for guaranteed uniqueness
+  const timestamp = Date.now().toString(36);
+  const random = Math.random().toString(36).substring(2, 6);
+  return `SC-${timestamp}-${random}`.toUpperCase();
+}
 

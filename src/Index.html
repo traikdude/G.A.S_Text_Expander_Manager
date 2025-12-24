@@ -1360,8 +1360,12 @@
       const newItems = Array.isArray(res.shortcuts) ? res.shortcuts : [];
       console.log('[handleSnapshotCreated] Received', newItems.length, 'items');
 
-      state.shortcuts = normalizeDataset(newItems);
-      console.log('[handleSnapshotCreated] After normalize:', state.shortcuts.length, 'items');
+      // Process initial batch with ID preservation
+      state.shortcuts = newItems.map((item, i) => ({
+        ...item,
+        id: item.id || `shortcut-init-${i}`
+      }));
+      console.log('[handleSnapshotCreated] After processing:', state.shortcuts.length, 'items');
 
       state.offset = res.offset || newItems.length;
       state.hasMore = res.hasMore;
@@ -1406,8 +1410,34 @@
           }
 
           const newItems = Array.isArray(res.shortcuts) ? res.shortcuts : [];
-          const cleanNewItems = normalizeDataset(newItems);
-          state.shortcuts = state.shortcuts.concat(cleanNewItems);
+
+          // DIAGNOSTIC: Track batch accumulation
+          const beforeCount = state.shortcuts.length;
+          const existingIds = new Set(state.shortcuts.map(s => s.id));
+          let added = 0;
+          let skippedDupe = 0;
+          let skippedNoId = 0;
+
+          for (let i = 0; i < newItems.length; i++) {
+            const item = newItems[i];
+            const id = item.id;
+
+            if (!id) {
+              skippedNoId++;
+              continue;
+            }
+
+            if (existingIds.has(id)) {
+              skippedDupe++;
+              continue;
+            }
+
+            existingIds.add(id);
+            state.shortcuts.push({ ...item, id: id });
+            added++;
+          }
+
+          console.log(`[Batch] Received: ${newItems.length}, Added: ${added}, Skipped(dupe): ${skippedDupe}, Skipped(noId): ${skippedNoId}, Total now: ${state.shortcuts.length}`);
 
           state.offset = res.offset;
           state.hasMore = res.hasMore;
@@ -1446,21 +1476,18 @@
       }
     }
 
-    // --- DATASET NORMALIZATION & DEDUPLICATION PATCH ---
-    // ... (normalizeDataset remains the same, but ensure it handles independent batches correctly)
+    // --- DATASET NORMALIZATION ---
+    // Uses ID (not Snippet Name) for uniqueness to allow multiple shortcuts with same name
     function normalizeDataset(data) {
-      // NOTE: For incremental loading, we can't easily dedupe against the *entire* existing array efficiently 
-      // without a Map. For now, we assume server batches are distinct. 
-      // We only dedupe within the *current batch* here.
       const seen = new Set();
       const result = [];
       for (let i = 0; i < data.length; i++) {
         const item = data[i];
-        const key = String(item.key || '').trim();
-        if (!key) continue;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        const id = item.id || `shortcut-${key}`;
+        // Use server-provided ID for uniqueness, fallback to generated ID
+        const id = item.id || `shortcut-${i}-${Date.now()}`;
+        if (!id) continue;
+        if (seen.has(id)) continue;
+        seen.add(id);
         result.push({ ...item, id: id });
       }
       return result;
