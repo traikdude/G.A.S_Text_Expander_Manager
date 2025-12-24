@@ -1114,7 +1114,40 @@
       DEBUG: true
     };
 
-    // ... (UI LAYOUT SYNC functions remain here)
+    // ========================================================================
+    // UI LAYOUT SYNC (Fixed Header Height Management)
+    // ========================================================================
+    
+    /**
+     * Syncs the top bar height to CSS variable for proper content offset
+     */
+    function syncTopBarHeight() {
+      const topBar = document.querySelector('.top-bar');
+      if (topBar) {
+        const height = topBar.offsetHeight;
+        document.documentElement.style.setProperty('--topbar-h', height + 'px');
+        if (CONFIG.DEBUG) console.log('[Layout] Top bar height:', height + 'px');
+      }
+    }
+
+    /**
+     * Sets up a resize observer to keep the top bar height in sync
+     */
+    function setupResizeObserver() {
+      const topBar = document.querySelector('.top-bar');
+      if (!topBar) return;
+      
+      // Use ResizeObserver if available, fallback to window resize
+      if (typeof ResizeObserver !== 'undefined') {
+        const observer = new ResizeObserver(() => {
+          syncTopBarHeight();
+        });
+        observer.observe(topBar);
+      } else {
+        // Fallback for older browsers
+        window.addEventListener('resize', syncTopBarHeight);
+      }
+    }
 
     // ========================================================================
     // INITIALIZATION & REFRESH
