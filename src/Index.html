@@ -1212,6 +1212,206 @@
         .replace(/'/g, '&#39;');
     }
 
+    /**
+     * Safely encode a string for use in data attributes (Base64)
+     * @param {string} str - String to encode
+     * @return {string} Base64 encoded string
+     */
+    function safeEncode(str) {
+      if (str === null || str === undefined) return '';
+      try {
+        return btoa(unescape(encodeURIComponent(String(str))));
+      } catch (e) {
+        console.error('[safeEncode] Failed to encode:', e);
+        return '';
+      }
+    }
+
+    /**
+     * Safely decode a Base64 encoded string from data attributes
+     * @param {string} encoded - Base64 encoded string
+     * @return {string} Decoded string
+     */
+    function safeDecode(encoded) {
+      if (!encoded) return '';
+      try {
+        return decodeURIComponent(escape(atob(encoded)));
+      } catch (e) {
+        console.error('[safeDecode] Failed to decode:', e);
+        return '';
+      }
+    }
+
+    /**
+     * Find a shortcut by its ID
+     * @param {string} id - Shortcut ID
+     * @return {Object|null} Shortcut object or null
+     */
+    function findShortcutById(id) {
+      return state.shortcuts.find(s => s.id === id) || null;
+    }
+
+    // ========================================================================
+    // EVENT DELEGATION SYSTEM
+    // Handles all grid clicks without inline onclick handlers
+    // ========================================================================
+
+    /**
+     * Sets up event delegation on shortcut grids
+     * Call this once during app initialization
+     */
+    function setupEventDelegation() {
+      const shortcutsGrid = el('shortcutsGrid');
+      const favoritesGrid = el('favoritesGrid');
+
+      if (shortcutsGrid) {
+        shortcutsGrid.addEventListener('click', handleGridClick);
+      }
+      if (favoritesGrid) {
+        favoritesGrid.addEventListener('click', handleGridClick);
+      }
+
+      if (CONFIG.DEBUG) console.log('[EventDelegation] Set up on grids');
+    }
+
+    /**
+     * Handles all click events on shortcut grids via delegation
+     * @param {Event} event - Click event
+     */
+    function handleGridClick(event) {
+      // Check for action buttons first (copy/favorite)
+      const actionBtn = event.target.closest('[data-action]');
+      if (actionBtn) {
+        event.stopPropagation();
+        event.preventDefault();
+
+        const action = actionBtn.dataset.action;
+        const id = actionBtn.dataset.id;
+        const shortcut = findShortcutById(id);
+
+        if (!shortcut) {
+          console.error('[handleGridClick] Shortcut not found for ID:', id);
+          toast('Shortcut not found.', 'bad');
+          return;
+        }
+
+        if (action === 'copy') {
+          doCopyToClipboard(shortcut, actionBtn);
+        } else if (action === 'favorite') {
+          doToggleFavorite(shortcut, actionBtn);
+        }
+        return;
+      }
+
+      // Check for card click (edit shortcut)
+      const card = event.target.closest('.shortcut-card');
+      if (card && card.dataset.id) {
+        const id = card.dataset.id;
+        const shortcut = findShortcutById(id);
+        if (shortcut) {
+          editShortcut(shortcut.key);
+        } else {
+          console.error('[handleGridClick] Shortcut not found for card ID:', id);
+          toast('Shortcut not found.', 'bad');
+        }
+      }
+    }
+
+    /**
+     * Handles copy to clipboard via event delegation
+     * @param {Object} shortcut - Shortcut object
+     * @param {HTMLElement} btn - Button element for visual feedback
+     */
+    function doCopyToClipboard(shortcut, btn) {
+      const textToCopy = shortcut.expansion;
+      const key = shortcut.key;
+
+      // Visual feedback
+      const originalHtml = btn.innerHTML;
+      btn.innerHTML = '✅';
+
+      // Try modern Clipboard API first
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(textToCopy)
+          .then(() => {
+            console.log(`[Copy] Copied "${key}" via Clipboard API`);
+            toast(`Copied "${key}" to clipboard! 📋`, 'good');
+            // Auto-favorite on copy
+            google.script.run
+              .withSuccessHandler((res) => {
+                if (res && res.ok && res.favorite) {
+                  shortcut.favorite = true;
+                  render();
+                }
+              })
+              .withFailureHandler((err) => console.error('[Copy] Favorite failed:', err))
+              .addToFavorites(key);
+          })
+          .catch((err) => {
+            console.error('[Copy] Clipboard API failed:', err);
+            fallbackCopy(textToCopy, key);
+          })
+          .finally(() => {
+            setTimeout(() => { btn.innerHTML = originalHtml; }, 1000);
+          });
+      } else {
+        // Fallback for older browsers
+        fallbackCopy(textToCopy, key);
+        setTimeout(() => { btn.innerHTML = originalHtml; }, 1000);
+      }
+    }
+
+    /**
+     * Fallback copy method using textarea
+     */
+    function fallbackCopy(text, key) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        toast(`Copied "${key}" to clipboard! 📋`, 'good');
+      } catch (e) {
+        toast('Copy failed. Please copy manually.', 'bad');
+      }
+      document.body.removeChild(textarea);
+    }
+
+    /**
+     * Handles favorite toggle via event delegation
+     * @param {Object} shortcut - Shortcut object
+     * @param {HTMLElement} btn - Button element for visual feedback
+     */
+    function doToggleFavorite(shortcut, btn) {
+      const key = shortcut.key;
+      const newState = !shortcut.favorite;
+
+      console.log(`[Favorite] Toggle: ${key} -> ${newState}`);
+
+      btn.disabled = true;
+      google.script.run
+        .withSuccessHandler((res) => {
+          btn.disabled = false;
+          if (res && res.ok) {
+            shortcut.favorite = res.favorite;
+            render();
+            toast(res.favorite ? `Added "${key}" to favorites! ⭐` : `Removed "${key}" from favorites.`, 'good');
+          } else {
+            toast('Failed to update favorite.', 'bad');
+          }
+        })
+        .withFailureHandler((err) => {
+          btn.disabled = false;
+          console.error('[Favorite] Error:', err);
+          toast('Failed to update favorite.', 'bad');
+        })
+        .toggleFavorite(key);
+    }
+
     // ========================================================================
     // UI LAYOUT SYNC (Fixed Header Height Management)
     // ========================================================================
@@ -1464,6 +1664,9 @@
       state.loaded = true;
       setReady(`${state.shortcuts.length} shortcuts loaded`);
       if (CONFIG.DEBUG) console.log(`[Load] Complete. Total: ${state.shortcuts.length}`);
+
+      // Set up event delegation (only needs to be called once)
+      setupEventDelegation();
     }
 
     function updateStatusCount() {
@@ -1605,28 +1808,28 @@
     }
 
     function createShortcutCard(shortcut) {
-      // Safely escape and encode for HTML attributes
-      // Double-encode to handle apostrophes: encodeURIComponent twice ensures
-      // the decoded string in onclick still has the apostrophe encoded as %27
-      const keyEncoded = encodeURIComponent(encodeURIComponent(shortcut.key));
+      // Use data-id attributes instead of inline onclick handlers
+      // This avoids issues with special characters breaking JavaScript strings
+      const idAttr = escapeHtml(shortcut.id || '');
       const keyHtml = escapeHtml(shortcut.key);
       const expansionHtml = escapeHtml(shortcut.expansion);
       const applicationHtml = escapeHtml(shortcut.application || '');
       const languageHtml = escapeHtml(shortcut.language || '');
       const favoriteClass = shortcut.favorite ? 'active' : '';
+      const favoriteTitle = escapeHtml(shortcut.favorite ? 'Remove from favorites' : 'Add to favorites');
 
       return `
-        <div class="shortcut-card" onclick="editShortcut(decodeURIComponent(decodeURIComponent('${keyEncoded}')))">
+        <div class="shortcut-card" data-id="${idAttr}">
           <div class="shortcut-card-header">
             <div class="shortcut-key">${keyHtml}</div>
             <div class="shortcut-actions">
               <button class="icon-btn favorite ${favoriteClass}" 
-                      onclick="toggleFavoriteHandler(event, decodeURIComponent(decodeURIComponent('${keyEncoded}')), ${!shortcut.favorite})"
-                      title="${shortcut.favorite ? 'Remove from favorites' : 'Add to favorites'}">
+                      data-action="favorite" data-id="${idAttr}"
+                      title="${favoriteTitle}">
                 ${shortcut.favorite ? '★' : '☆'}
               </button>
               <button class="icon-btn" 
-                      onclick="copyToClipboardHandler(event, decodeURIComponent(decodeURIComponent('${keyEncoded}')))"
+                      data-action="copy" data-id="${idAttr}"
                       title="Copy content">
                 📋
               </button>
