@@ -1606,7 +1606,9 @@
 
     function createShortcutCard(shortcut) {
       // Safely escape and encode for HTML attributes
-      const keyEncoded = encodeURIComponent(shortcut.key);
+      // Double-encode to handle apostrophes: encodeURIComponent twice ensures
+      // the decoded string in onclick still has the apostrophe encoded as %27
+      const keyEncoded = encodeURIComponent(encodeURIComponent(shortcut.key));
       const keyHtml = escapeHtml(shortcut.key);
       const expansionHtml = escapeHtml(shortcut.expansion);
       const applicationHtml = escapeHtml(shortcut.application || '');
@@ -1614,17 +1616,17 @@
       const favoriteClass = shortcut.favorite ? 'active' : '';
 
       return `
-        <div class="shortcut-card" onclick="editShortcut(decodeURIComponent('${keyEncoded}'))">
+        <div class="shortcut-card" onclick="editShortcut(decodeURIComponent(decodeURIComponent('${keyEncoded}')))">
           <div class="shortcut-card-header">
             <div class="shortcut-key">${keyHtml}</div>
             <div class="shortcut-actions">
               <button class="icon-btn favorite ${favoriteClass}" 
-                      onclick="toggleFavoriteHandler(event, decodeURIComponent('${keyEncoded}'), ${!shortcut.favorite})"
+                      onclick="toggleFavoriteHandler(event, decodeURIComponent(decodeURIComponent('${keyEncoded}')), ${!shortcut.favorite})"
                       title="${shortcut.favorite ? 'Remove from favorites' : 'Add to favorites'}">
                 ${shortcut.favorite ? '★' : '☆'}
               </button>
               <button class="icon-btn" 
-                      onclick="copyToClipboardHandler(event, decodeURIComponent('${keyEncoded}'))"
+                      onclick="copyToClipboardHandler(event, decodeURIComponent(decodeURIComponent('${keyEncoded}')))"
                       title="Copy content">
                 📋
               </button>
@@ -1638,6 +1640,7 @@
         </div>
       `;
     }
+
 
     function updateEmptyStates() {
       const allEmpty = el('emptyStateAll');
