@@ -1719,3 +1719,389 @@ function generateShortcutId_() {
   return `SC-${timestamp}-${random}`.toUpperCase();
 }
 
+// ============================================================================
+// SHEET ORGANIZATION & STRUCTURE ANALYSIS
+// Run via GAS Editor: Run → analyzeSheetStructure, then View → Logs
+// ============================================================================
+
+/**
+ * DIAGNOSTIC: Analyze the current sheet structure and compare against expected headers.
+ * Run this first to understand the current state before any reorganization.
+ * @return {Object} Detailed analysis report
+ */
+function analyzeSheetStructure() {
+  console.log('');
+  console.log('╔═══════════════════════════════════════════════════════════════════════════════╗');
+  console.log('║ 📊 SHEET STRUCTURE ANALYSIS                                                   ║');
+  console.log('╚═══════════════════════════════════════════════════════════════════════════════╝');
+  console.log('');
+  
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CFG.SHEET_SHORTCUTS);
+  if (!sheet) {
+    console.log('❌ ERROR: Shortcuts sheet not found!');
+    return { error: 'Sheet not found' };
+  }
+  
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  const data = sheet.getDataRange().getValues();
+  const currentHeaders = data[0];
+  
+  console.log('📋 CURRENT HEADERS:');
+  currentHeaders.forEach((h, i) => {
+    const colLetter = String.fromCharCode(65 + i);
+    console.log(`   Column ${colLetter}: "${h}"`);
+  });
+  
+  console.log('');
+  console.log('📋 EXPECTED HEADERS:');
+  HEADERS_SHORTCUTS.forEach((h, i) => {
+    const colLetter = String.fromCharCode(65 + i);
+    console.log(`   Column ${colLetter}: "${h}"`);
+  });
+  
+  // Compare headers
+  console.log('');
+  console.log('🔍 HEADER COMPARISON:');
+  const headerIssues = [];
+  const maxCols = Math.max(currentHeaders.length, HEADERS_SHORTCUTS.length);
+  
+  for (let i = 0; i < maxCols; i++) {
+    const current = String(currentHeaders[i] || '').trim();
+    const expected = HEADERS_SHORTCUTS[i] || '(none)';
+    const colLetter = String.fromCharCode(65 + i);
+    
+    if (current === expected) {
+      console.log(`   ✅ Column ${colLetter}: "${current}" matches`);
+    } else {
+      console.log(`   ❌ Column ${colLetter}: "${current}" ≠ expected "${expected}"`);
+      headerIssues.push({ column: colLetter, index: i, current, expected });
+    }
+  }
+  
+  // Sample data analysis
+  console.log('');
+  console.log('📊 SAMPLE DATA (First 5 rows):');
+  for (let row = 1; row < Math.min(6, data.length); row++) {
+    console.log(`   Row ${row + 1}:`);
+    for (let col = 0; col < Math.min(5, currentHeaders.length); col++) {
+      const colLetter = String.fromCharCode(65 + col);
+      const value = String(data[row][col] || '').substring(0, 40);
+      console.log(`      ${colLetter}: "${value}${value.length >= 40 ? '...' : ''}"`);
+    }
+  }
+  
+  // Content pattern detection
+  console.log('');
+  console.log('🔬 CONTENT PATTERN ANALYSIS:');
+  const patterns = detectColumnPatterns_(data);
+  Object.entries(patterns).forEach(([colLetter, detectedType]) => {
+    console.log(`   Column ${colLetter}: Detected as "${detectedType}"`);
+  });
+  
+  // Summary
+  console.log('');
+  console.log('═══════════════════════════════════════════════════════════════════════════════');
+  if (headerIssues.length === 0) {
+    console.log('✅ HEADERS ARE CORRECT!');
+    console.log('   No reorganization needed. Run migrateAddIdColumn() if ID column is missing.');
+  } else {
+    console.log(`⚠️  FOUND ${headerIssues.length} HEADER MISMATCH(ES)`);
+    console.log('   Run reorganizeSheetStructure(true) to preview fixes.');
+    console.log('   Run reorganizeSheetStructure(false) to apply fixes.');
+  }
+  console.log('═══════════════════════════════════════════════════════════════════════════════');
+  
+  return {
+    totalRows: lastRow,
+    totalColumns: lastCol,
+    currentHeaders: currentHeaders,
+    expectedHeaders: HEADERS_SHORTCUTS,
+    headerIssues: headerIssues,
+    detectedPatterns: patterns,
+    needsReorganization: headerIssues.length > 0
+  };
+}
+
+/**
+ * Helper: Detect what type of data each column contains based on patterns.
+ * @param {Array} data - 2D array of sheet data
+ * @return {Object} Column letter -> detected type mapping
+ */
+function detectColumnPatterns_(data) {
+  if (data.length < 2) return {};
+  
+  const patterns = {};
+  const sampleSize = Math.min(100, data.length - 1);
+  
+  for (let col = 0; col < data[0].length; col++) {
+    const colLetter = String.fromCharCode(65 + col);
+    const samples = [];
+    
+    // Collect samples from data rows (skip header)
+    for (let row = 1; row <= sampleSize; row++) {
+      if (data[row] && data[row][col]) {
+        samples.push(String(data[row][col]));
+      }
+    }
+    
+    if (samples.length === 0) {
+      patterns[colLetter] = 'empty';
+      continue;
+    }
+    
+    // Detect patterns
+    const avgLength = samples.reduce((sum, s) => sum + s.length, 0) / samples.length;
+    const hasNewlines = samples.some(s => s.includes('\n'));
+    const startsWithSC = samples.filter(s => s.match(/^SC-|^ROW-/i)).length > samples.length * 0.5;
+    const shortStrings = samples.filter(s => s.length < 50).length > samples.length * 0.8;
+    const hasTimestamps = samples.filter(s => s.match(/^\d{4}-\d{2}-\d{2}|T\d{2}:\d{2}/)).length > samples.length * 0.3;
+    
+    if (startsWithSC) {
+      patterns[colLetter] = 'ID';
+    } else if (hasTimestamps) {
+      patterns[colLetter] = 'UpdatedAt';
+    } else if (avgLength > 100 || hasNewlines) {
+      patterns[colLetter] = 'Content (long text)';
+    } else if (shortStrings && avgLength < 30) {
+      patterns[colLetter] = 'Short text (Name/App)';
+    } else {
+      patterns[colLetter] = 'Mixed content';
+    }
+  }
+  
+  return patterns;
+}
+
+/**
+ * REORGANIZE: Fix column order to match expected structure.
+ * 
+ * @param {boolean} dryRun - If true, only previews changes. If false, applies changes.
+ * @return {Object} Reorganization result
+ */
+function reorganizeSheetStructure(dryRun = true) {
+  console.log('');
+  console.log('╔═══════════════════════════════════════════════════════════════════════════════╗');
+  console.log(`║ 🔧 SHEET REORGANIZATION ${dryRun ? '(PREVIEW MODE)' : '(EXECUTE MODE)'}                          ║`);
+  console.log('╚═══════════════════════════════════════════════════════════════════════════════╝');
+  console.log('');
+  
+  if (dryRun) {
+    console.log('⚠️  PREVIEW MODE: No changes will be made.');
+    console.log('   To apply changes, run: reorganizeSheetStructure(false)');
+    console.log('');
+  }
+  
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CFG.SHEET_SHORTCUTS);
+  if (!sheet) {
+    console.log('❌ ERROR: Shortcuts sheet not found!');
+    return { error: 'Sheet not found' };
+  }
+  
+  const data = sheet.getDataRange().getValues();
+  const currentHeaders = data[0].map(h => String(h).trim());
+  
+  // Build mapping: expected header -> current column index
+  console.log('📊 COLUMN MAPPING:');
+  const columnMap = {};
+  const missingHeaders = [];
+  
+  HEADERS_SHORTCUTS.forEach((expected, targetIdx) => {
+    const currentIdx = currentHeaders.indexOf(expected);
+    const targetLetter = String.fromCharCode(65 + targetIdx);
+    
+    if (currentIdx === -1) {
+      console.log(`   ⚠️  "${expected}" → NOT FOUND (will create at Column ${targetLetter})`);
+      missingHeaders.push({ header: expected, targetIdx });
+    } else if (currentIdx === targetIdx) {
+      console.log(`   ✅ "${expected}" → Column ${targetLetter} (already correct)`);
+    } else {
+      const currentLetter = String.fromCharCode(65 + currentIdx);
+      console.log(`   🔄 "${expected}" → Move from Column ${currentLetter} to ${targetLetter}`);
+    }
+    columnMap[expected] = currentIdx;
+  });
+  
+  // Check if already organized
+  const needsReorg = HEADERS_SHORTCUTS.some((h, i) => columnMap[h] !== i);
+  const hasMissing = missingHeaders.length > 0;
+  
+  if (!needsReorg && !hasMissing) {
+    console.log('');
+    console.log('✅ SHEET IS ALREADY CORRECTLY ORGANIZED!');
+    console.log('   No changes needed.');
+    return { success: true, message: 'Already organized', changes: 0 };
+  }
+  
+  if (dryRun) {
+    console.log('');
+    console.log('═══════════════════════════════════════════════════════════════════════════════');
+    console.log('📋 PREVIEW COMPLETE');
+    console.log(`   Columns to reorder: ${needsReorg ? 'Yes' : 'No'}`);
+    console.log(`   Missing columns to add: ${missingHeaders.length}`);
+    console.log('');
+    console.log('   To apply these changes, run:');
+    console.log('   reorganizeSheetStructure(false)');
+    console.log('═══════════════════════════════════════════════════════════════════════════════');
+    
+    return {
+      success: true,
+      dryRun: true,
+      needsReorg,
+      missingHeaders: missingHeaders.map(m => m.header)
+    };
+  }
+  
+  // EXECUTE MODE: Apply changes
+  console.log('');
+  console.log('🔄 APPLYING CHANGES...');
+  
+  // Step 1: Build new data array with correct column order
+  const newData = [];
+  
+  for (let row = 0; row < data.length; row++) {
+    const newRow = [];
+    
+    HEADERS_SHORTCUTS.forEach((expectedHeader, targetIdx) => {
+      const sourceIdx = columnMap[expectedHeader];
+      
+      if (row === 0) {
+        // Header row: use expected header name
+        newRow.push(expectedHeader);
+      } else if (sourceIdx === -1) {
+        // Missing column: fill with empty or default
+        if (expectedHeader === 'ID') {
+          newRow.push(`SC-${String(row).padStart(6, '0')}`);
+        } else if (expectedHeader === 'UpdatedAt') {
+          newRow.push(new Date().toISOString());
+        } else {
+          newRow.push('');
+        }
+      } else {
+        // Copy from source column
+        newRow.push(data[row][sourceIdx]);
+      }
+    });
+    
+    newData.push(newRow);
+  }
+  
+  // Step 2: Clear sheet and write new data
+  console.log('   Clearing existing data...');
+  sheet.clear();
+  
+  console.log('   Writing reorganized data...');
+  sheet.getRange(1, 1, newData.length, newData[0].length).setValues(newData);
+  
+  // Step 3: Format header row
+  console.log('   Formatting header row...');
+  sheet.getRange(1, 1, 1, HEADERS_SHORTCUTS.length)
+    .setFontWeight('bold')
+    .setBackground('#4a86e8')
+    .setFontColor('#ffffff');
+  
+  // Step 4: Invalidate cache
+  console.log('   Invalidating cache...');
+  invalidateShortcutsCache_();
+  bumpCacheVersion_();
+  
+  console.log('');
+  console.log('═══════════════════════════════════════════════════════════════════════════════');
+  console.log('🎉 REORGANIZATION COMPLETE!');
+  console.log(`   Processed ${newData.length - 1} data rows`);
+  console.log(`   Organized ${HEADERS_SHORTCUTS.length} columns`);
+  console.log('');
+  console.log('   Please refresh the web app to see the changes.');
+  console.log('═══════════════════════════════════════════════════════════════════════════════');
+  
+  return {
+    success: true,
+    dryRun: false,
+    rowsProcessed: newData.length - 1,
+    columnsOrganized: HEADERS_SHORTCUTS.length
+  };
+}
+
+/**
+ * SORT BY CATEGORY: Sorts the shortcuts sheet by Application (category) column.
+ * Keeps header row in place, sorts all data rows alphabetically by category.
+ * 
+ * @param {boolean} dryRun - If true, only previews. If false, applies sort.
+ * @return {Object} Sort result
+ */
+function sortSheetByCategory(dryRun = true) {
+  console.log('');
+  console.log('╔═══════════════════════════════════════════════════════════════════════════════╗');
+  console.log(`║ 📑 SORT SHEET BY CATEGORY ${dryRun ? '(PREVIEW)' : '(EXECUTE)'}                               ║`);
+  console.log('╚═══════════════════════════════════════════════════════════════════════════════╝');
+  
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CFG.SHEET_SHORTCUTS);
+  if (!sheet) {
+    console.log('❌ ERROR: Shortcuts sheet not found!');
+    return { error: 'Sheet not found' };
+  }
+  
+  const data = sheet.getDataRange().getValues();
+  const header = data[0];
+  
+  // Find Application column
+  const appColIdx = header.indexOf('Application');
+  if (appColIdx === -1) {
+    console.log('❌ ERROR: Application column not found!');
+    return { error: 'Application column not found' };
+  }
+  
+  console.log(`📊 Application column found at index ${appColIdx} (Column ${String.fromCharCode(65 + appColIdx)})`);
+  
+  // Count categories
+  const categories = {};
+  for (let i = 1; i < data.length; i++) {
+    const cat = String(data[i][appColIdx] || '').trim() || '(empty)';
+    categories[cat] = (categories[cat] || 0) + 1;
+  }
+  
+  console.log('');
+  console.log('📋 CATEGORIES FOUND:');
+  Object.entries(categories)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 15)
+    .forEach(([cat, count]) => {
+      console.log(`   "${cat}": ${count} shortcuts`);
+    });
+  
+  if (Object.keys(categories).length > 15) {
+    console.log(`   ... and ${Object.keys(categories).length - 15} more categories`);
+  }
+  
+  if (dryRun) {
+    console.log('');
+    console.log('⚠️  PREVIEW MODE: Run sortSheetByCategory(false) to apply sort.');
+    return { success: true, dryRun: true, categories: Object.keys(categories).length };
+  }
+  
+  // Execute sort
+  console.log('');
+  console.log('🔄 Sorting data...');
+  
+  // Sort data rows (keep header)
+  const dataRows = data.slice(1);
+  dataRows.sort((a, b) => {
+    const catA = String(a[appColIdx] || '').toLowerCase();
+    const catB = String(b[appColIdx] || '').toLowerCase();
+    return catA.localeCompare(catB);
+  });
+  
+  // Write sorted data
+  sheet.getRange(2, 1, dataRows.length, dataRows[0].length).setValues(dataRows);
+  
+  // Invalidate cache
+  invalidateShortcutsCache_();
+  bumpCacheVersion_();
+  
+  console.log('');
+  console.log('✅ SORT COMPLETE!');
+  console.log(`   Sorted ${dataRows.length} rows by category.`);
+  
+  return { success: true, dryRun: false, rowsSorted: dataRows.length };
+}
+
