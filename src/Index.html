@@ -1442,7 +1442,8 @@
             // Auto-favorite on copy
             google.script.run
               .withSuccessHandler((res) => {
-                if (res && res.ok && res.favorite) {
+                // Backend returns { status: 'added'|'removed', snippet: key }
+                if (res && res.status === 'added') {
                   shortcut.favorite = true;
                   render();
                 }
@@ -1491,18 +1492,20 @@
      */
     function doToggleFavorite(shortcut, btn) {
       const key = shortcut.key;
-      const newState = !shortcut.favorite;
+      const currentFavorite = shortcut.favorite;
 
-      console.log(`[Favorite] Toggle: ${key} -> ${newState}`);
+      console.log(`[Favorite] Toggle: ${key} -> ${!currentFavorite}`);
 
       btn.disabled = true;
       google.script.run
         .withSuccessHandler((res) => {
           btn.disabled = false;
-          if (res && res.ok) {
-            shortcut.favorite = res.favorite;
+          // Backend returns { status: 'added'|'removed', snippet: key }
+          if (res && res.status) {
+            const newFavoriteState = res.status === 'added';
+            shortcut.favorite = newFavoriteState;
             render();
-            toast(res.favorite ? `Added "${key}" to favorites! ⭐` : `Removed "${key}" from favorites.`, 'good');
+            toast(newFavoriteState ? `Added "${key}" to favorites! ⭐` : `Removed "${key}" from favorites.`, 'good');
           } else {
             toast('Failed to update favorite.', 'bad');
           }
