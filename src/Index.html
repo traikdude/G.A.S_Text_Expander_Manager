@@ -234,6 +234,15 @@
       border-radius: 6px;
       margin-bottom: 16px;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      /* UX FIX: Sticky search bar - stays at top while scrolling */
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    /* When sticky, add stronger shadow for visual separation */
+    .search-filter.is-sticky {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     }
 
     .search-box {
@@ -334,19 +343,22 @@
 
     .filter-result-count .clear-filters-btn {
       margin-left: auto;
-      padding: 4px 10px;
+      padding: 4px 12px;
       font-size: 12px;
+      font-weight: 500;
+      /* UX FIX: Visible blue outline button instead of invisible white */
       background: #fff;
-      border: 1px solid #dadce0;
+      color: #1a73e8;
+      border: 1px solid #1a73e8;
       border-radius: 4px;
       cursor: pointer;
       transition: all 0.2s;
     }
 
     .filter-result-count .clear-filters-btn:hover {
-      background: #f1f3f4;
+      background: #1a73e8;
+      color: white;
       border-color: #1a73e8;
-      color: #1a73e8;
     }
 
     /* Filter section label */
