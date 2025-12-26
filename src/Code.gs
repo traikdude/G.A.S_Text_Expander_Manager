@@ -151,7 +151,13 @@ function onOpen(e) {
       .addItem('📅 Create Sheets by Category', 'createSheetsByCategory')
       .addItem('🌍 Create Sheets by Language', 'createSheetsByLanguage')
       .addSeparator()
+      .addItem('🔄 Sync Current Sheet to Shortcuts', 'syncCurrentSheetToMain')
+      .addItem('🔄 Sync All Category Sheets', 'syncAllCategorySheetsToMain')
+      .addSeparator()
       .addItem('🗑️ Delete Category Sheets', 'deleteAllCategorySheets')
+    )
+    .addSubMenu(ui.createMenu('⚙️ Setup')
+      .addItem('📋 Add Category Dropdown to Description', 'addCategoryDropdown')
     )
     .addSeparator()
     .addItem('🔄 Warm Cache (10k+)', 'warmShortcutsCache')
@@ -2360,4 +2366,228 @@ function deleteAllCategorySheets() {
   }
   
   ui.alert(`✅ Deleted ${deleted} category/language sheets.`);
+}
+
+// ============================================================================
+// CATEGORY SHEET SYNC FUNCTIONS
+// Syncs edits from category sheets back to the main Shortcuts sheet
+// ============================================================================
+
+/**
+ * List of valid category sheet prefixes (must match createSheetsByCategory)
+ */
+const CATEGORY_PREFIXES = ['📅', '🔢', '👋', '✨', '😊', '📧', '♈', '📝', '🇺🇸', '🇪🇸'];
+
+/**
+ * List of category options for Description dropdown
+ */
+const CATEGORY_OPTIONS = [
+  'Dates',
+  'Numbers',
+  'Greetings',
+  'Symbols',
+  'Kaomoji',
+  'Email',
+  'Zodiac',
+  'General'
+];
+
+/**
+ * Syncs the currently active sheet back to the main Shortcuts sheet.
+ * Matches rows by ID and updates the main sheet.
+ */
+function syncCurrentSheetToMain() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  const activeSheet = ss.getActiveSheet();
+  const sheetName = activeSheet.getName();
+  
+  // Check if this is a category sheet
+  if (!CATEGORY_PREFIXES.some(prefix => sheetName.startsWith(prefix))) {
+    ui.alert('⚠️ Not a Category Sheet', 
+      'This sheet is not a category sheet.\n\n' +
+      'Please select a category sheet (like 📅 Dates or 🔢 Numbers) before running sync.',
+      ui.ButtonSet.OK);
+    return;
+  }
+  
+  const mainSheet = ss.getSheetByName(CFG.SHEET_SHORTCUTS);
+  if (!mainSheet) {
+    ui.alert('❌ Error: Shortcuts sheet not found!');
+    return;
+  }
+  
+  const result = syncSheetToMain_(activeSheet, mainSheet);
+  
+  // Invalidate cache after sync
+  invalidateShortcutsCache_();
+  bumpCacheVersion_();
+  
+  ui.alert('✅ Sync Complete',
+    `📊 Results for "${sheetName}":\n\n` +
+    `• Rows synced: ${result.synced}\n` +
+    `• Rows not found (skipped): ${result.notFound}\n` +
+    `• Total rows processed: ${result.total}\n\n` +
+    `The cache has been invalidated. Refresh the web app to see changes.`,
+    ui.ButtonSet.OK);
+}
+
+/**
+ * Syncs all category sheets back to the main Shortcuts sheet.
+ */
+function syncAllCategorySheetsToMain() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  
+  const response = ui.alert('🔄 Sync All Category Sheets',
+    'This will sync ALL category sheets (📅 Dates, 🔢 Numbers, etc.) back to the main Shortcuts sheet.\n\n' +
+    'Any edits you made in category sheets will update the corresponding rows in Shortcuts.\n\n' +
+    'Continue?',
+    ui.ButtonSet.YES_NO);
+  
+  if (response !== ui.Button.YES) return;
+  
+  const mainSheet = ss.getSheetByName(CFG.SHEET_SHORTCUTS);
+  if (!mainSheet) {
+    ui.alert('❌ Error: Shortcuts sheet not found!');
+    return;
+  }
+  
+  const sheets = ss.getSheets();
+  let totalSynced = 0;
+  let totalNotFound = 0;
+  let sheetsProcessed = 0;
+  
+  for (const sheet of sheets) {
+    const name = sheet.getName();
+    if (CATEGORY_PREFIXES.some(prefix => name.startsWith(prefix))) {
+      const result = syncSheetToMain_(sheet, mainSheet);
+      totalSynced += result.synced;
+      totalNotFound += result.notFound;
+      sheetsProcessed++;
+      Logger.log(`Synced ${name}: ${result.synced} rows`);
+    }
+  }
+  
+  // Invalidate cache after sync
+  invalidateShortcutsCache_();
+  bumpCacheVersion_();
+  
+  ui.alert('✅ Sync All Complete',
+    `📊 Summary:\n\n` +
+    `• Category sheets processed: ${sheetsProcessed}\n` +
+    `• Total rows synced: ${totalSynced}\n` +
+    `• Rows not found (skipped): ${totalNotFound}\n\n` +
+    `The cache has been invalidated. Refresh the web app to see changes.`,
+    ui.ButtonSet.OK);
+}
+
+/**
+ * Internal function: Syncs a single category sheet to the main Shortcuts sheet
+ * @param {Sheet} categorySheet - The category sheet to sync from
+ * @param {Sheet} mainSheet - The main Shortcuts sheet to sync to
+ * @returns {Object} { synced, notFound, total }
+ */
+function syncSheetToMain_(categorySheet, mainSheet) {
+  const categoryData = categorySheet.getDataRange().getValues();
+  const mainData = mainSheet.getDataRange().getValues();
+  
+  if (categoryData.length <= 1) {
+    return { synced: 0, notFound: 0, total: 0 };
+  }
+  
+  // Build ID-to-row-number map for main sheet (row numbers are 1-indexed)
+  const idToRow = new Map();
+  for (let i = 1; i < mainData.length; i++) {
+    const id = mainData[i][0]; // ID is in column A (index 0)
+    if (id) {
+      idToRow.set(String(id), i + 1); // +1 because row numbers are 1-indexed
+    }
+  }
+  
+  let synced = 0;
+  let notFound = 0;
+  
+  // Process each row in category sheet (skip header row)
+  for (let i = 1; i < categoryData.length; i++) {
+    const row = categoryData[i];
+    const id = String(row[0]);
+    
+    if (!id) {
+      notFound++;
+      continue;
+    }
+    
+    const mainRowNum = idToRow.get(id);
+    if (!mainRowNum) {
+      notFound++;
+      Logger.log(`ID not found in Shortcuts: ${id}`);
+      continue;
+    }
+    
+    // Update the entire row in main sheet
+    mainSheet.getRange(mainRowNum, 1, 1, row.length).setValues([row]);
+    synced++;
+  }
+  
+  return { synced, notFound, total: categoryData.length - 1 };
+}
+
+// ============================================================================
+// CATEGORY DROPDOWN SETUP
+// Adds data validation dropdown to Description column
+// ============================================================================
+
+/**
+ * Adds a dropdown menu with category options to the Description column
+ * in the Shortcuts sheet, making it easier to categorize entries.
+ */
+function addCategoryDropdown() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  const sheet = ss.getSheetByName(CFG.SHEET_SHORTCUTS);
+  
+  if (!sheet) {
+    ui.alert('❌ Error: Shortcuts sheet not found!');
+    return;
+  }
+  
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  
+  // Find Description column
+  const descColIndex = headers.findIndex(h => 
+    h.toString().toLowerCase().includes('description')
+  );
+  
+  if (descColIndex === -1) {
+    ui.alert('❌ Error: Description column not found!');
+    return;
+  }
+  
+  const descColNum = descColIndex + 1; // Convert to 1-indexed
+  
+  // Get the data range for Description column (excluding header)
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) {
+    ui.alert('⚠️ No data rows to add dropdown to.');
+    return;
+  }
+  
+  const descRange = sheet.getRange(2, descColNum, lastRow - 1, 1);
+  
+  // Create data validation rule with category options
+  const rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(CATEGORY_OPTIONS, true) // true = show dropdown
+    .setAllowInvalid(true) // Allow other values too (don't restrict)
+    .setHelpText('Select a category or type your own')
+    .build();
+  
+  descRange.setDataValidation(rule);
+  
+  ui.alert('✅ Category Dropdown Added!',
+    `📋 Dropdown added to Description column (Column ${descColNum}).\n\n` +
+    `Categories available:\n` +
+    `• ${CATEGORY_OPTIONS.join('\n• ')}\n\n` +
+    `You can also type custom values if needed.`,
+    ui.ButtonSet.OK);
 }
