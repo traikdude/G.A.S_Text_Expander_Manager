@@ -96,14 +96,31 @@ function getFavoritesColumnMap_(header) {
  * 
  * @param {string} snippetName - The shortcut key.
  * @param {Object} options - { mode: 'toggle'|'force_add'|'force_remove' }
- * @return {Object} result - { status: 'added'|'removed'|'unchanged', snippet: snippetName }
+ * @return {Object} result - { status: 'added'|'removed'|'unchanged'|'error', snippet: snippetName }
  */
 function updateFavoriteStatus_(snippetName, options = { mode: 'toggle' }) {
-  const userEmail = Session.getActiveUser().getEmail();
-  if (!userEmail) throw new Error('User email not available.');
+  // 🔥 FIX: Use getUserEmail_() helper instead of direct Session call
+  const userEmail = getUserEmail_();
+  if (!userEmail) {
+    console.error('[updateFavoriteStatus_] User email not available');
+    return { 
+      status: 'error', 
+      snippet: snippetName, 
+      message: 'User email not available. Please reload the app.' 
+    };
+  }
   
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(CFG.SHEET_FAVORITES);
+  
+  if (!sheet) {
+    console.error('[updateFavoriteStatus_] Favorites sheet not found');
+    return {
+      status: 'error',
+      snippet: snippetName,
+      message: 'Favorites sheet not found.'
+    };
+  }
   
   // 🔒 Use DocumentLock to synchronize with all other users/processes
   const lock = LockService.getScriptLock();
@@ -124,6 +141,15 @@ function updateFavoriteStatus_(snippetName, options = { mode: 'toggle' }) {
     
     const targetEmail = String(userEmail || '').trim();
     const targetKey = String(snippetName || '').trim();
+    
+    if (!targetKey) {
+      return { 
+        status: 'error', 
+        snippet: '', 
+        message: 'Invalid snippet name.' 
+      };
+    }
+    
     const rowsToDelete = [];
     
     // 🔍 Step 1: Find ALL existing entries for this user/key
@@ -153,16 +179,12 @@ function updateFavoriteStatus_(snippetName, options = { mode: 'toggle' }) {
       }
     } else if (options.mode === 'force_add') {
       if (exists) {
-        // Already exists. To be perfectly safe against duplicates, we could 
-        // delete and re-add, or just ensure at least one remains.
-        // Best practice: If multiple exist, clean them up to leave just one.
         if (rowsToDelete.length > 1) {
-             shouldDelete = true; // Delete all, then we will add one back
+             shouldDelete = true;
              shouldAdd = true;
-             resultStatus = 'added'; // Effectively re-added/fixed
+             resultStatus = 'added';
         } else {
-             // Exactly one exists. Do nothing.
-             resultStatus = 'added'; // It is there.
+             resultStatus = 'added';
         }
       } else {
         shouldAdd = true;
@@ -173,7 +195,7 @@ function updateFavoriteStatus_(snippetName, options = { mode: 'toggle' }) {
         shouldDelete = true;
         resultStatus = 'removed';
       } else {
-        resultStatus = 'removed'; // Already gone
+        resultStatus = 'removed';
       }
     }
     
@@ -181,7 +203,7 @@ function updateFavoriteStatus_(snippetName, options = { mode: 'toggle' }) {
     
     // Delete first (reverse order to preserve indices)
     if (shouldDelete && rowsToDelete.length > 0) {
-      rowsToDelete.sort((a, b) => b - a); // Descending
+      rowsToDelete.sort((a, b) => b - a);
       for (let i = 0; i < rowsToDelete.length; i++) {
         sheet.deleteRow(rowsToDelete[i]);
       }
@@ -196,7 +218,12 @@ function updateFavoriteStatus_(snippetName, options = { mode: 'toggle' }) {
     
   } catch (e) {
     console.error(`[updateFavoriteStatus_] Error: ${e.toString()}`);
-    throw new Error(`Failed to update favorite: ${e.message}`);
+    // 🔥 FIX: Return error object instead of throwing
+    return { 
+      status: 'error', 
+      snippet: snippetName, 
+      message: `Failed to update favorite: ${e.message}` 
+    };
     
   } finally {
     lock.releaseLock();

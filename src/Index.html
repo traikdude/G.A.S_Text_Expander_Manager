@@ -1500,14 +1500,20 @@
       google.script.run
         .withSuccessHandler((res) => {
           btn.disabled = false;
-          // Backend returns { status: 'added'|'removed', snippet: key }
+          // Backend returns { status: 'added'|'removed'|'error', snippet: key, message?: string }
           if (res && res.status) {
-            const newFavoriteState = res.status === 'added';
-            shortcut.favorite = newFavoriteState;
-            render();
-            toast(newFavoriteState ? `Added "${key}" to favorites! ⭐` : `Removed "${key}" from favorites.`, 'good');
+            if (res.status === 'error') {
+              // Handle error response from backend
+              console.error('[Favorite] Backend error:', res.message);
+              toast(res.message || 'Failed to update favorite.', 'bad');
+            } else {
+              const newFavoriteState = res.status === 'added';
+              shortcut.favorite = newFavoriteState;
+              render();
+              toast(newFavoriteState ? `Added "${key}" to favorites! ⭐` : `Removed "${key}" from favorites.`, 'good');
+            }
           } else {
-            toast('Failed to update favorite.', 'bad');
+            toast('Failed to update favorite (invalid response).', 'bad');
           }
         })
         .withFailureHandler((err) => {
