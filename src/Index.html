@@ -996,24 +996,14 @@
       font-weight: 600;
     }
 
-    /* Filter chips - back to original visible styling */
-    .search-section .chip {
-      background: #f1f3f4;
-      color: #3c4043;
-      border: 1px solid #dadce0;
-    }
-
-    .search-section .chip:hover {
-      background: #e8eaed;
-      border-color: #667eea;
-    }
-
-    .search-section .chip.active {
-      background: #667eea;
-      color: white;
-      font-weight: 600;
-      border-color: #667eea;
-    }
+    /* 
+     * Filter chips - let original colorful styles apply!
+     * Original styles from lines 277-325 provide:
+     * - Default blue chips: #e8f0fe / #1a73e8
+     * - Spanish (🇪🇸): red tones #fce8e6 / #d93025  
+     * - English (🇺🇸): green tones #e6f4ea / #137333
+     * We only need to ensure label visibility, not override chip colors
+     */
 
     .search-section .filter-result-count {
       background: #e8f0fe;
