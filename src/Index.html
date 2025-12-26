@@ -1009,6 +1009,19 @@
           <div class="chip lang-spanish" data-filter="spanish" data-filter-type="language">🇪🇸 Spanish</div>
           <div class="chip lang-english" data-filter="english" data-filter-type="language">🇺🇸 English</div>
         </div>
+
+        <!-- Type/Category Filter Chips (based on description field) -->
+        <div class="filter-chips" id="typeFilters" style="margin-top: 8px;">
+          <span class="filter-label">Type:</span>
+          <div class="chip active" data-filter="all" data-filter-type="type">📁 All</div>
+          <div class="chip" data-filter="dates" data-filter-type="type">📅 Dates</div>
+          <div class="chip" data-filter="numbers" data-filter-type="type">🔢 Numbers</div>
+          <div class="chip" data-filter="greetings" data-filter-type="type">👋 Greetings</div>
+          <div class="chip" data-filter="symbols" data-filter-type="type">✨ Symbols</div>
+          <div class="chip" data-filter="kaomoji" data-filter-type="type">😊 Kaomoji</div>
+          <div class="chip" data-filter="email" data-filter-type="type">📧 Email</div>
+          <div class="chip" data-filter="zodiac" data-filter-type="type">♈ Zodiac</div>
+        </div>
       </div>
 
       <!-- Shortcuts Grid -->
@@ -1185,6 +1198,7 @@
       searchQuery: '',
       filterMode: 'all',
       languageFilter: 'all',        // 'all' | 'spanish' | 'english'
+      typeFilter: 'all',             // 'all' | 'dates' | 'numbers' | 'greetings' | etc. (filters on description)
       searchDebounceTimer: null,    // Timer ID for debounced search
       editingKey: null,
       importMode: 'csv',
@@ -1958,7 +1972,15 @@
     function getFilteredShortcuts() {
       let filtered = state.shortcuts;
 
-      // Apply language filter FIRST (most selective)
+      // Apply type filter (filters on description field - category like dates, numbers, etc.)
+      if (state.typeFilter !== 'all') {
+        filtered = filtered.filter(s => {
+          const desc = (s.description || '').toLowerCase();
+          return desc === state.typeFilter || desc.includes(state.typeFilter);
+        });
+      }
+
+      // Apply language filter
       if (state.languageFilter !== 'all') {
         filtered = filtered.filter(s => {
           const lang = (s.language || '').toLowerCase();
@@ -1972,19 +1994,20 @@
         });
       }
 
-      // Apply search filter
+      // Apply search filter (scans key, expansion, tags, description)
       if (state.searchQuery) {
         const query = state.searchQuery.toLowerCase();
         filtered = filtered.filter(s =>
           s.key.toLowerCase().includes(query) ||
           s.expansion.toLowerCase().includes(query) ||
           (s.tags && s.tags.toLowerCase().includes(query)) ||
+          (s.description && s.description.toLowerCase().includes(query)) ||
           (s.application && s.application.toLowerCase().includes(query)) ||
           (s.language && s.language.toLowerCase().includes(query))
         );
       }
 
-      // Apply category filter (favorites)
+      // Apply favorites filter
       if (state.filterMode === 'favorites') {
         filtered = filtered.filter(s => s.favorite);
       }
@@ -2052,6 +2075,7 @@
       state.searchQuery = '';
       state.filterMode = 'all';
       state.languageFilter = 'all';
+      state.typeFilter = 'all';
 
       // Reset UI
       el('searchInput').value = '';
@@ -2061,6 +2085,9 @@
         c.classList.toggle('active', c.dataset.filter === 'all');
       });
       document.querySelectorAll('#languageFilters .chip').forEach(c => {
+        c.classList.toggle('active', c.dataset.filter === 'all');
+      });
+      document.querySelectorAll('#typeFilters .chip').forEach(c => {
         c.classList.toggle('active', c.dataset.filter === 'all');
       });
 
@@ -2090,7 +2117,8 @@
       // Show banner only when filters are active
       const hasActiveFilter = state.searchQuery ||
         state.filterMode !== 'all' ||
-        state.languageFilter !== 'all';
+        state.languageFilter !== 'all' ||
+        state.typeFilter !== 'all';
 
       if (hasActiveFilter) {
         banner.style.display = 'flex';
@@ -2152,6 +2180,20 @@
           if (chip) {
             state.languageFilter = chip.dataset.filter;
             updateChipActiveState(languageFilters, chip);
+            render();
+            updateFilterCount();
+          }
+        });
+      }
+
+      // Type filters (event delegation) - filters on description field
+      const typeFilters = el('typeFilters');
+      if (typeFilters) {
+        typeFilters.addEventListener('click', (e) => {
+          const chip = e.target.closest('[data-filter-type="type"]');
+          if (chip) {
+            state.typeFilter = chip.dataset.filter;
+            updateChipActiveState(typeFilters, chip);
             render();
             updateFilterCount();
           }
