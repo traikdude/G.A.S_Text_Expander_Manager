@@ -234,15 +234,17 @@
       border-radius: 6px;
       margin-bottom: 16px;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-      /* UX FIX: Sticky search bar - stays at top while scrolling */
+      /* UX FIX: Sticky search bar - stays below fixed top-bar while scrolling */
       position: sticky;
-      top: 0;
+      top: calc(var(--topbar-h, 220px) + 16px);
       z-index: 100;
+      transition: box-shadow 0.2s ease;
     }
 
-    /* When sticky, add stronger shadow for visual separation */
+    /* Enhanced shadow when sticky for visual depth */
     .search-filter.is-sticky {
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      border-radius: 0 0 6px 6px;
     }
 
     .search-box {
@@ -996,15 +998,19 @@
       <div class="search-filter">
         <div class="search-box">
           <input type="text" class="search-input" id="searchInput"
-            placeholder="🔍 Search shortcuts by name, content, tags, or language...">
-          <button id="btnClearSearch">Clear</button>
+            placeholder="🔍 Search shortcuts by name, content, tags, or language..."
+            aria-label="Search shortcuts by name, content, tags, or language" aria-describedby="filterResultCount"
+            role="searchbox">
+          <button id="btnClearSearch" aria-label="Clear search">Clear</button>
         </div>
 
         <!-- Filter Result Count Banner (hidden by default) -->
-        <div class="filter-result-count" id="filterResultCount" style="display: none;">
+        <div class="filter-result-count" id="filterResultCount" style="display: none;" aria-live="polite"
+          aria-atomic="true">
           <span>🔎</span>
           <span>Showing <span class="count" id="filteredCount">0</span> of <span id="totalCount">0</span> results</span>
-          <button class="clear-filters-btn" id="btnClearAllFilters">Clear All Filters</button>
+          <button class="clear-filters-btn" id="btnClearAllFilters" aria-label="Clear all active filters">Clear All
+            Filters</button>
         </div>
 
         <!-- Category Filter Chips -->
@@ -1343,17 +1349,21 @@
     }
 
     /**
-     * Safely decode a Base64 encoded string from data attributes
+     * Safely decodes base64 encoded strings with fallback handling
      * @param {string} encoded - Base64 encoded string
-     * @return {string} Decoded string
+     * @returns {string} Decoded string, or original if decode fails
      */
     function safeDecode(encoded) {
       if (!encoded) return '';
       try {
         return decodeURIComponent(escape(atob(encoded)));
       } catch (e) {
-        console.error('[safeDecode] Failed to decode:', e);
-        return '';
+        console.warn('[safeDecode] Decode failed, returning original:', {
+          input: encoded.substring(0, 50) + (encoded.length > 50 ? '...' : ''),
+          error: e.message
+        });
+        // Return original instead of empty to preserve data
+        return encoded;
       }
     }
 
@@ -1571,12 +1581,33 @@
       }
     }
 
+    /**
+     * Detects when search bar becomes sticky and adds visual feedback
+     */
+    function setupStickyObserver() {
+      const searchFilter = document.querySelector('.search-filter');
+      if (!searchFilter) return;
+
+      window.addEventListener('scroll', () => {
+        const rect = searchFilter.getBoundingClientRect();
+        const topBarHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--topbar-h')) || 220;
+        const stickyThreshold = topBarHeight + 20;
+
+        if (rect.top <= stickyThreshold + 5) {
+          searchFilter.classList.add('is-sticky');
+        } else {
+          searchFilter.classList.remove('is-sticky');
+        }
+      }, { passive: true });
+    }
+
     // ========================================================================
     // INITIALIZATION & REFRESH
     // ========================================================================
     window.onload = function () {
       syncTopBarHeight();
       setupResizeObserver();
+      setupStickyObserver();
       // Initialize app and start data fetch
       initializeApp();
     };
