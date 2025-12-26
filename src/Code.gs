@@ -134,23 +134,34 @@ function fetchSnapshotPage_(snapshotToken, offset, limit) {
 
 /**
  * Simple trigger: adds custom menu on spreadsheet open.
+ * v18 Fix: Enhanced menu with emojis and Organize Sheets submenu
  * @param {Object} e - Event object.
  */
 function onOpen(e) {
   ensureSheets_();
-  SpreadsheetApp.getUi()
-    .createMenu(CFG.MENU_NAME)
-    .addItem('Open Manager (Sidebar)', 'openManagerSidebar')
-    .addItem('Open Manager (Dialog)', 'openManagerDialog')
+  const ui = SpreadsheetApp.getUi();
+  
+  ui.createMenu('📝 Text Expansion Tools')
+    .addItem('🚀 Open Manager (Sidebar)', 'openManagerSidebar')
+    .addItem('🖼️ Open Manager (Dialog)', 'openManagerDialog')
     .addSeparator()
-    .addItem('Open Web App (New Tab Link)', 'openWebAppLinkDialog')
+    .addItem('🌐 Open Web App (New Tab)', 'openWebAppLinkDialog')
     .addSeparator()
-    .addItem('Warm Cache (10k+)', 'warmShortcutsCache')
-    .addItem('Invalidate Cache', 'invalidateShortcutsCache')
+    .addSubMenu(ui.createMenu('📁 Organize Sheets')
+      .addItem('📅 Create Sheets by Category', 'createSheetsByCategory')
+      .addItem('🌍 Create Sheets by Language', 'createSheetsByLanguage')
+      .addSeparator()
+      .addItem('🗑️ Delete Category Sheets', 'deleteAllCategorySheets')
+    )
     .addSeparator()
-    .addItem('Cleanup All Duplicates', 'cleanupAllDuplicates')
-    .addItem('Cleanup Shortcuts Only', 'cleanupDuplicateShortcuts')
-    .addItem('Cleanup Favorites Only', 'cleanupDuplicateFavorites')
+    .addItem('🔄 Warm Cache (10k+)', 'warmShortcutsCache')
+    .addItem('🗑️ Invalidate Cache', 'invalidateShortcutsCache')
+    .addSeparator()
+    .addSubMenu(ui.createMenu('🧹 Cleanup')
+      .addItem('🧹 Cleanup All Duplicates', 'cleanupAllDuplicates')
+      .addItem('📋 Cleanup Shortcuts Only', 'cleanupDuplicateShortcuts')
+      .addItem('⭐ Cleanup Favorites Only', 'cleanupDuplicateFavorites')
+    )
     .addToUi();
 }
 
@@ -2105,3 +2116,248 @@ function sortSheetByCategory(dryRun = true) {
   return { success: true, dryRun: false, rowsSorted: dataRows.length };
 }
 
+// ============================================================================
+// SHEET ORGANIZATION FUNCTIONS (v18 Fix)
+// Creates separate sheets by category/language for easier navigation
+// ============================================================================
+
+/**
+ * Creates separate sheets for each category based on the Description column.
+ * Categories: dates, numbers, greetings, symbols, kaomoji, email, zodiac, general
+ */
+function createSheetsByCategory() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const mainSheet = ss.getSheetByName(CFG.SHEET_SHORTCUTS);
+  
+  if (!mainSheet) {
+    SpreadsheetApp.getUi().alert('❌ Error: "Shortcuts" sheet not found!');
+    return;
+  }
+  
+  const data = mainSheet.getDataRange().getValues();
+  const headers = data[0];
+  
+  // Find the Description column index
+  const descColIndex = headers.findIndex(h => 
+    h.toString().toLowerCase().includes('description') ||
+    h.toString().toLowerCase().includes('type')
+  );
+  
+  if (descColIndex === -1) {
+    SpreadsheetApp.getUi().alert('❌ Error: Description/Type column not found!');
+    return;
+  }
+  
+  Logger.log(`📊 Found Description column at index: ${descColIndex}`);
+  
+  // Define category sheets to create
+  const categoryConfig = {
+    'dates': { emoji: '📅', color: '#e3f2fd' },
+    'numbers': { emoji: '🔢', color: '#fff3e0' },
+    'greetings': { emoji: '👋', color: '#e8f5e9' },
+    'symbols': { emoji: '✨', color: '#fce4ec' },
+    'kaomoji': { emoji: '😊', color: '#fff8e1' },
+    'email': { emoji: '📧', color: '#e1f5fe' },
+    'zodiac': { emoji: '♈', color: '#f3e5f5' },
+    'general': { emoji: '📝', color: '#f5f5f5' }
+  };
+  
+  // Group data by category
+  const categorizedData = {};
+  Object.keys(categoryConfig).forEach(cat => {
+    categorizedData[cat] = [headers];
+  });
+  
+  // Sort each row into appropriate category
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const description = (row[descColIndex] || '').toString().trim().toLowerCase();
+    
+    let category = 'general';
+    
+    if (description.includes('date') || description.includes('month') || description.includes('year')) {
+      category = 'dates';
+    } else if (description.includes('number') || description.includes('digit')) {
+      category = 'numbers';
+    } else if (description.includes('greeting') || description.includes('hello') || description.includes('morning') || description.includes('night')) {
+      category = 'greetings';
+    } else if (description.includes('symbol') || description.includes('special') || description.includes('punctuation')) {
+      category = 'symbols';
+    } else if (description.includes('kaomoji') || description.includes('emoticon') || description.includes('face')) {
+      category = 'kaomoji';
+    } else if (description.includes('email') || description.includes('mail') || description.includes('contact')) {
+      category = 'email';
+    } else if (description.includes('zodiac') || description.includes('astro') || description.includes('sign')) {
+      category = 'zodiac';
+    }
+    
+    categorizedData[category].push(row);
+  }
+  
+  let sheetsCreated = 0;
+  let rowsProcessed = 0;
+  
+  Object.entries(categoryConfig).forEach(([category, config]) => {
+    const sheetData = categorizedData[category];
+    
+    if (sheetData.length <= 1) {
+      Logger.log(`⏭️ Skipping "${category}" - no data`);
+      return;
+    }
+    
+    const sheetName = `${config.emoji} ${category.charAt(0).toUpperCase() + category.slice(1)}`;
+    let sheet = ss.getSheetByName(sheetName);
+    
+    if (sheet) {
+      sheet.clear();
+      Logger.log(`🔄 Cleared existing sheet: ${sheetName}`);
+    } else {
+      sheet = ss.insertSheet(sheetName);
+      sheetsCreated++;
+      Logger.log(`✅ Created new sheet: ${sheetName}`);
+    }
+    
+    const numRows = sheetData.length;
+    const numCols = sheetData[0].length;
+    
+    sheet.getRange(1, 1, numRows, numCols).setValues(sheetData);
+    
+    const headerRange = sheet.getRange(1, 1, 1, numCols);
+    headerRange.setFontWeight('bold');
+    headerRange.setBackground('#667eea');
+    headerRange.setFontColor('white');
+    
+    sheet.setTabColor(config.color);
+    
+    for (let c = 1; c <= numCols; c++) {
+      sheet.autoResizeColumn(c);
+    }
+    
+    sheet.setFrozenRows(1);
+    rowsProcessed += (numRows - 1);
+    
+    Logger.log(`📝 Added ${numRows - 1} rows to ${sheetName}`);
+  });
+  
+  const ui = SpreadsheetApp.getUi();
+  ui.alert(
+    '✅ Category Sheets Created!',
+    `📊 Summary:\n\n` +
+    `• New sheets created: ${sheetsCreated}\n` +
+    `• Total rows processed: ${rowsProcessed}\n` +
+    `• Categories: ${Object.keys(categoryConfig).join(', ')}\n\n` +
+    `Look for the new tabs at the bottom of your spreadsheet!`,
+    ui.ButtonSet.OK
+  );
+}
+
+/**
+ * Creates separate sheets by Language (English, Spanish)
+ */
+function createSheetsByLanguage() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const mainSheet = ss.getSheetByName(CFG.SHEET_SHORTCUTS);
+  
+  if (!mainSheet) {
+    SpreadsheetApp.getUi().alert('❌ Error: "Shortcuts" sheet not found!');
+    return;
+  }
+  
+  const data = mainSheet.getDataRange().getValues();
+  const headers = data[0];
+  
+  const langColIndex = headers.findIndex(h => 
+    h.toString().toLowerCase().includes('language')
+  );
+  
+  if (langColIndex === -1) {
+    SpreadsheetApp.getUi().alert('❌ Error: Language column not found!');
+    return;
+  }
+  
+  const languageConfig = {
+    'english': { emoji: '🇺🇸', color: '#bbdefb' },
+    'spanish': { emoji: '🇪🇸', color: '#ffcc80' }
+  };
+  
+  const languageData = {
+    'english': [headers],
+    'spanish': [headers]
+  };
+  
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const language = (row[langColIndex] || '').toString().trim().toLowerCase();
+    
+    if (language.includes('spanish') || language.includes('español') || language === 'es') {
+      languageData['spanish'].push(row);
+    } else if (language.includes('english') || language === 'en') {
+      languageData['english'].push(row);
+    }
+  }
+  
+  let sheetsCreated = 0;
+  
+  Object.entries(languageConfig).forEach(([language, config]) => {
+    const sheetData = languageData[language];
+    
+    if (sheetData.length <= 1) return;
+    
+    const sheetName = `${config.emoji} ${language.charAt(0).toUpperCase() + language.slice(1)}`;
+    let sheet = ss.getSheetByName(sheetName);
+    
+    if (sheet) {
+      sheet.clear();
+    } else {
+      sheet = ss.insertSheet(sheetName);
+      sheetsCreated++;
+    }
+    
+    const numRows = sheetData.length;
+    const numCols = sheetData[0].length;
+    
+    sheet.getRange(1, 1, numRows, numCols).setValues(sheetData);
+    sheet.getRange(1, 1, 1, numCols).setFontWeight('bold').setBackground('#667eea').setFontColor('white');
+    sheet.setTabColor(config.color);
+    sheet.setFrozenRows(1);
+    
+    for (let c = 1; c <= numCols; c++) {
+      sheet.autoResizeColumn(c);
+    }
+  });
+  
+  SpreadsheetApp.getUi().alert(`✅ Language sheets created! (${sheetsCreated} new sheets)`);
+}
+
+/**
+ * Deletes all category/language sheets (useful for resetting)
+ */
+function deleteAllCategorySheets() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  
+  const response = ui.alert(
+    '⚠️ Confirm Deletion',
+    'This will delete all category sheets (📅 Dates, 🔢 Numbers, etc.) and language sheets (🇺🇸 English, 🇪🇸 Spanish).\n\nAre you sure?',
+    ui.ButtonSet.YES_NO
+  );
+  
+  if (response !== ui.Button.YES) return;
+  
+  const categoryPrefixes = ['📅', '🔢', '👋', '✨', '😊', '📧', '♈', '📝', '🇺🇸', '🇪🇸'];
+  
+  let deleted = 0;
+  const sheets = ss.getSheets();
+  
+  // Delete in reverse order to avoid index shifting issues
+  for (let i = sheets.length - 1; i >= 0; i--) {
+    const sheet = sheets[i];
+    const name = sheet.getName();
+    if (categoryPrefixes.some(prefix => name.startsWith(prefix))) {
+      ss.deleteSheet(sheet);
+      deleted++;
+    }
+  }
+  
+  ui.alert(`✅ Deleted ${deleted} category/language sheets.`);
+}

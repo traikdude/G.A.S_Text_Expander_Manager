@@ -947,6 +947,133 @@
     .top-bar .tabs {
       margin-bottom: 0;
     }
+
+    /* ========================================================================
+       SEARCH SECTION IN FIXED HEADER (v18 Fix)
+       Search bar now part of fixed header instead of sticky in scroll area
+       ======================================================================== */
+    .search-section {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      padding: 12px 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.2);
+      /* NOTE: Alternative - use header gradient match:
+         background: linear-gradient(135deg, rgba(102,126,234,0.95) 0%, rgba(118,75,162,0.95) 100%);
+      */
+    }
+
+    /* Search filter container - no longer sticky, transparent in header */
+    .search-section .search-filter {
+      background: transparent;
+      padding: 0;
+      margin-bottom: 0;
+      box-shadow: none;
+      position: static;
+    }
+
+    .search-section .search-box {
+      margin-bottom: 8px;
+    }
+
+    .search-section .search-input {
+      background: rgba(255, 255, 255, 0.95);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 8px;
+    }
+
+    .search-section .search-input:focus {
+      border-color: #fff;
+      box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.2);
+    }
+
+    .search-section .filter-chips {
+      margin-top: 6px;
+    }
+
+    .search-section .filter-label {
+      color: rgba(255, 255, 255, 0.9);
+    }
+
+    .search-section .chip {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+
+    .search-section .chip:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    .search-section .chip.active {
+      background: white;
+      color: #667eea;
+      font-weight: 600;
+    }
+
+    .search-section .filter-result-count {
+      background: rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: white;
+    }
+
+    .search-section .filter-result-count .count {
+      color: #ffd700;
+    }
+
+    .search-section .clear-filters-btn {
+      background: rgba(255, 215, 0, 0.2);
+      color: #ffd700;
+      border: 1px solid rgba(255, 215, 0, 0.5);
+    }
+
+    .search-section .clear-filters-btn:hover {
+      background: #ffd700;
+      color: #333;
+    }
+
+    /* ========================================================================
+       MOBILE FILTER COLLAPSE TOGGLE
+       Collapses filter chips on mobile to save vertical space
+       ======================================================================== */
+    .filter-collapse-btn {
+      display: none;
+      /* Hidden on desktop */
+      width: 100%;
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.15);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      margin-bottom: 8px;
+      text-align: center;
+      transition: all 0.2s;
+    }
+
+    .filter-collapse-btn:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    @media (max-width: 768px) {
+      .filter-collapse-btn {
+        display: block;
+      }
+
+      /* Collapsed state for filter chips */
+      .search-section .filter-chips-wrapper.collapsed {
+        display: none !important;
+      }
+
+      /* Adjust main content padding when filters collapsed */
+      .main-content.filters-collapsed {
+        padding-top: calc(var(--topbar-h, 180px) + 12px) !important;
+      }
+
+      /* NOTE: Alternative approach - filters start EXPANDED on mobile
+         Remove .collapsed class from initial HTML if user prefers this */
+    }
   </style>
 </head>
 
@@ -989,12 +1116,14 @@
         📥 Import
       </button>
     </div>
-  </div>
 
-  <div class="main-content">
-    <!-- Tab Content: All Shortcuts -->
-    <div class="tab-content active" id="contentAll">
-      <!-- Search & Filter -->
+    <!-- Search Section (v18 Fix: Now inside fixed header) -->
+    <div class="search-section">
+      <!-- Mobile Collapse Toggle Button -->
+      <button class="filter-collapse-btn" id="filterCollapseBtn" onclick="toggleFilterCollapse()">
+        🔼 Show Filters
+      </button>
+
       <div class="search-filter">
         <div class="search-box">
           <input type="text" class="search-input" id="searchInput"
@@ -1013,34 +1142,43 @@
             Filters</button>
         </div>
 
-        <!-- Category Filter Chips -->
-        <div class="filter-chips" id="categoryFilters">
-          <span class="filter-label">Category:</span>
-          <div class="chip active" data-filter="all" data-filter-type="category">📋 All</div>
-          <div class="chip" data-filter="favorites" data-filter-type="category">⭐ Favorites</div>
-        </div>
+        <!-- Filter Chips Container (collapsed by default on mobile) -->
+        <div class="filter-chips-wrapper collapsed" id="filterChipsWrapper">
+          <!-- Category Filter Chips -->
+          <div class="filter-chips" id="categoryFilters">
+            <span class="filter-label">Category:</span>
+            <div class="chip active" data-filter="all" data-filter-type="category">📋 All</div>
+            <div class="chip" data-filter="favorites" data-filter-type="category">⭐ Favorites</div>
+          </div>
 
-        <!-- Language Filter Chips -->
-        <div class="filter-chips" id="languageFilters" style="margin-top: 8px;">
-          <span class="filter-label">Language:</span>
-          <div class="chip active" data-filter="all" data-filter-type="language">🌐 All</div>
-          <div class="chip lang-spanish" data-filter="spanish" data-filter-type="language">🇪🇸 Spanish</div>
-          <div class="chip lang-english" data-filter="english" data-filter-type="language">🇺🇸 English</div>
-        </div>
+          <!-- Language Filter Chips -->
+          <div class="filter-chips" id="languageFilters" style="margin-top: 8px;">
+            <span class="filter-label">Language:</span>
+            <div class="chip active" data-filter="all" data-filter-type="language">🌐 All</div>
+            <div class="chip lang-spanish" data-filter="spanish" data-filter-type="language">🇪🇸 Spanish</div>
+            <div class="chip lang-english" data-filter="english" data-filter-type="language">🇺🇸 English</div>
+          </div>
 
-        <!-- Type/Category Filter Chips (based on description field) -->
-        <div class="filter-chips" id="typeFilters" style="margin-top: 8px;">
-          <span class="filter-label">Type:</span>
-          <div class="chip active" data-filter="all" data-filter-type="type">📁 All</div>
-          <div class="chip" data-filter="dates" data-filter-type="type">📅 Dates</div>
-          <div class="chip" data-filter="numbers" data-filter-type="type">🔢 Numbers</div>
-          <div class="chip" data-filter="greetings" data-filter-type="type">👋 Greetings</div>
-          <div class="chip" data-filter="symbols" data-filter-type="type">✨ Symbols</div>
-          <div class="chip" data-filter="kaomoji" data-filter-type="type">😊 Kaomoji</div>
-          <div class="chip" data-filter="email" data-filter-type="type">📧 Email</div>
-          <div class="chip" data-filter="zodiac" data-filter-type="type">♈ Zodiac</div>
+          <!-- Type/Category Filter Chips (based on description field) -->
+          <div class="filter-chips" id="typeFilters" style="margin-top: 8px;">
+            <span class="filter-label">Type:</span>
+            <div class="chip active" data-filter="all" data-filter-type="type">📁 All</div>
+            <div class="chip" data-filter="dates" data-filter-type="type">📅 Dates</div>
+            <div class="chip" data-filter="numbers" data-filter-type="type">🔢 Numbers</div>
+            <div class="chip" data-filter="greetings" data-filter-type="type">👋 Greetings</div>
+            <div class="chip" data-filter="symbols" data-filter-type="type">✨ Symbols</div>
+            <div class="chip" data-filter="kaomoji" data-filter-type="type">😊 Kaomoji</div>
+            <div class="chip" data-filter="email" data-filter-type="type">📧 Email</div>
+            <div class="chip" data-filter="zodiac" data-filter-type="type">♈ Zodiac</div>
+          </div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div class="main-content filters-collapsed">
+    <!-- Tab Content: All Shortcuts -->
+    <div class="tab-content active" id="contentAll">
 
       <!-- Shortcuts Grid -->
       <div class="shortcuts-grid" id="shortcutsGrid">
@@ -1236,6 +1374,47 @@
       RENDER_CHUNK_SIZE: 50, // Items to render per frame
       DEBUG: true
     };
+
+    // ========================================================================
+    // CATEGORY FILTER MAP (v18 Fix: Flexible type matching)
+    // Maps filter chip values to possible Description column values
+    // Enables matching 'dates' → ['dates', 'date', 'month', 'months', etc.]
+    // ========================================================================
+    const CATEGORY_FILTER_MAP = {
+      'all': ['*'], // Matches everything
+      'dates': ['dates', 'date', 'months', 'month', 'years', 'year', 'calendar'],
+      'numbers': ['numbers', 'number', 'numeric', 'digits'],
+      'greetings': ['greetings', 'greeting', 'hello', 'hi', 'morning', 'night', 'salutations'],
+      'symbols': ['symbols', 'symbol', 'special', 'punctuation', 'characters'],
+      'kaomoji': ['kaomoji', 'emoticons', 'emoticon', 'faces', 'ascii art', 'text faces'],
+      'email': ['email', 'emails', 'mail', 'address', 'contact'],
+      'zodiac': ['zodiac', 'astrology', 'horoscope', 'signs', 'astrological'],
+      'general': ['general', 'misc', 'miscellaneous', 'other', ''],
+    };
+
+    // ========================================================================
+    // MOBILE FILTER COLLAPSE TOGGLE
+    // Toggles filter chips visibility on mobile to save vertical space
+    // NOTE: Alternative - use floating "scroll to search" button instead
+    // ========================================================================
+    function toggleFilterCollapse() {
+      const wrapper = el('filterChipsWrapper');
+      const btn = el('filterCollapseBtn');
+      const mainContent = document.querySelector('.main-content');
+
+      if (!wrapper || !btn) return;
+
+      const isCollapsed = wrapper.classList.toggle('collapsed');
+      btn.textContent = isCollapsed ? '🔼 Show Filters' : '🔽 Hide Filters';
+
+      // Toggle main content padding class
+      if (mainContent) {
+        mainContent.classList.toggle('filters-collapsed', isCollapsed);
+      }
+
+      // Recalculate top bar height
+      syncTopBarHeight();
+    }
 
     // ========================================================================
     // UTILITY FUNCTIONS
@@ -2024,11 +2203,17 @@
     function getFilteredShortcuts() {
       let filtered = state.shortcuts;
 
-      // Apply type filter (filters on description field - category like dates, numbers, etc.)
+      // Apply type filter (v18 Fix: uses CATEGORY_FILTER_MAP for flexible matching)
       if (state.typeFilter !== 'all') {
+        const matchingValues = CATEGORY_FILTER_MAP[state.typeFilter] || [state.typeFilter];
         filtered = filtered.filter(s => {
-          const desc = (s.description || '').toLowerCase();
-          return desc === state.typeFilter || desc.includes(state.typeFilter);
+          const desc = (s.description || '').toLowerCase().trim();
+          // Check if description contains any of the matching values
+          return matchingValues.some(mv => {
+            if (mv === '*') return true;
+            if (mv === '' && desc === '') return true;
+            return desc.includes(mv.toLowerCase());
+          });
         });
       }
 
