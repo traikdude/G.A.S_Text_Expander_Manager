@@ -284,6 +284,79 @@
       color: white;
     }
 
+    /* Language-specific chip colors */
+    .chip.lang-spanish {
+      background: #fce8e6;
+      color: #d93025;
+    }
+
+    .chip.lang-spanish:hover {
+      background: #f8d7d4;
+    }
+
+    .chip.lang-spanish.active {
+      background: #d93025;
+      color: white;
+    }
+
+    .chip.lang-english {
+      background: #e6f4ea;
+      color: #137333;
+    }
+
+    .chip.lang-english:hover {
+      background: #ceead6;
+    }
+
+    .chip.lang-english.active {
+      background: #137333;
+      color: white;
+    }
+
+    /* Filter result count banner */
+    .filter-result-count {
+      padding: 10px 14px;
+      background: linear-gradient(135deg, #f8f9fa 0%, #e8f0fe 100%);
+      border-radius: 8px;
+      font-size: 13px;
+      color: #5f6368;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid #dadce0;
+    }
+
+    .filter-result-count .count {
+      color: #1a73e8;
+      font-weight: 600;
+    }
+
+    .filter-result-count .clear-filters-btn {
+      margin-left: auto;
+      padding: 4px 10px;
+      font-size: 12px;
+      background: #fff;
+      border: 1px solid #dadce0;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .filter-result-count .clear-filters-btn:hover {
+      background: #f1f3f4;
+      border-color: #1a73e8;
+      color: #1a73e8;
+    }
+
+    /* Filter section label */
+    .filter-label {
+      font-size: 12px;
+      color: #5f6368;
+      font-weight: 500;
+      margin-right: 8px;
+    }
+
     /* ========================================================================
        SHORTCUTS GRID
        ======================================================================== */
@@ -911,16 +984,30 @@
       <div class="search-filter">
         <div class="search-box">
           <input type="text" class="search-input" id="searchInput"
-            placeholder="🔍 Search shortcuts by name, content, or tags..." oninput="handleSearch()">
-          <button onclick="clearSearch()">Clear</button>
+            placeholder="🔍 Search shortcuts by name, content, tags, or language...">
+          <button id="btnClearSearch">Clear</button>
         </div>
-        <div class="filter-chips">
-          <div class="chip active" data-filter="all" onclick="handleFilterClick(this, 'all')">
-            All
-          </div>
-          <div class="chip" data-filter="favorites" onclick="handleFilterClick(this, 'favorites')">
-            ⭐ Favorites
-          </div>
+
+        <!-- Filter Result Count Banner (hidden by default) -->
+        <div class="filter-result-count" id="filterResultCount" style="display: none;">
+          <span>🔎</span>
+          <span>Showing <span class="count" id="filteredCount">0</span> of <span id="totalCount">0</span> results</span>
+          <button class="clear-filters-btn" id="btnClearAllFilters">Clear All Filters</button>
+        </div>
+
+        <!-- Category Filter Chips -->
+        <div class="filter-chips" id="categoryFilters">
+          <span class="filter-label">Category:</span>
+          <div class="chip active" data-filter="all" data-filter-type="category">📋 All</div>
+          <div class="chip" data-filter="favorites" data-filter-type="category">⭐ Favorites</div>
+        </div>
+
+        <!-- Language Filter Chips -->
+        <div class="filter-chips" id="languageFilters" style="margin-top: 8px;">
+          <span class="filter-label">Language:</span>
+          <div class="chip active" data-filter="all" data-filter-type="language">🌐 All</div>
+          <div class="chip lang-spanish" data-filter="spanish" data-filter-type="language">🇪🇸 Spanish</div>
+          <div class="chip lang-english" data-filter="english" data-filter-type="language">🇺🇸 English</div>
         </div>
       </div>
 
@@ -1097,6 +1184,8 @@
       tab: 'all',
       searchQuery: '',
       filterMode: 'all',
+      languageFilter: 'all',        // 'all' | 'spanish' | 'english'
+      searchDebounceTimer: null,    // Timer ID for debounced search
       editingKey: null,
       importMode: 'csv',
       // Progressive Loading (Snapshot)
@@ -1667,6 +1756,8 @@
 
       // Set up event delegation (only needs to be called once)
       setupEventDelegation();
+      setupFilterDelegation();  // Set up filter chip and search delegation
+      updateFilterCount();      // Initialize filter count display
     }
 
     function updateStatusCount() {
@@ -1867,6 +1958,20 @@
     function getFilteredShortcuts() {
       let filtered = state.shortcuts;
 
+      // Apply language filter FIRST (most selective)
+      if (state.languageFilter !== 'all') {
+        filtered = filtered.filter(s => {
+          const lang = (s.language || '').toLowerCase();
+          // Support multiple language formats: 'spanish', 'es', 'español', etc.
+          if (state.languageFilter === 'spanish') {
+            return lang === 'spanish' || lang === 'es' || lang === 'español' || lang.includes('spanish');
+          } else if (state.languageFilter === 'english') {
+            return lang === 'english' || lang === 'en' || lang.includes('english');
+          }
+          return lang === state.languageFilter;
+        });
+      }
+
       // Apply search filter
       if (state.searchQuery) {
         const query = state.searchQuery.toLowerCase();
@@ -1874,11 +1979,12 @@
           s.key.toLowerCase().includes(query) ||
           s.expansion.toLowerCase().includes(query) ||
           (s.tags && s.tags.toLowerCase().includes(query)) ||
-          (s.application && s.application.toLowerCase().includes(query))
+          (s.application && s.application.toLowerCase().includes(query)) ||
+          (s.language && s.language.toLowerCase().includes(query))
         );
       }
 
-      // Apply chip filter
+      // Apply category filter (favorites)
       if (state.filterMode === 'favorites') {
         filtered = filtered.filter(s => s.favorite);
       }
@@ -1908,19 +2014,154 @@
     }
 
     // ========================================================================
-    // SEARCH & FILTER
+    // SEARCH & FILTER (Enhanced with debouncing and event delegation)
     // ========================================================================
+
+    /**
+     * Debounced search handler (250ms delay)
+     * Prevents UI jank during rapid typing
+     */
     function handleSearch() {
-      state.searchQuery = el('searchInput').value;
-      render();
+      // Clear existing debounce timer
+      if (state.searchDebounceTimer) {
+        clearTimeout(state.searchDebounceTimer);
+      }
+
+      state.searchDebounceTimer = setTimeout(() => {
+        state.searchQuery = el('searchInput').value;
+        render();
+        updateFilterCount();
+      }, 250);
     }
 
+    /**
+     * Clear search input and reset filter
+     */
     function clearSearch() {
       el('searchInput').value = '';
       state.searchQuery = '';
       render();
+      updateFilterCount();
     }
 
+    /**
+     * Clear all filters and reset to default state
+     */
+    function clearAllFilters() {
+      // Reset state
+      state.searchQuery = '';
+      state.filterMode = 'all';
+      state.languageFilter = 'all';
+
+      // Reset UI
+      el('searchInput').value = '';
+
+      // Reset chip active states
+      document.querySelectorAll('#categoryFilters .chip').forEach(c => {
+        c.classList.toggle('active', c.dataset.filter === 'all');
+      });
+      document.querySelectorAll('#languageFilters .chip').forEach(c => {
+        c.classList.toggle('active', c.dataset.filter === 'all');
+      });
+
+      render();
+      updateFilterCount();
+    }
+
+    /**
+     * Updates active state for chips in a container
+     */
+    function updateChipActiveState(container, activeChip) {
+      container.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      activeChip.classList.add('active');
+    }
+
+    /**
+     * Updates the filter result count banner
+     */
+    function updateFilterCount() {
+      const filtered = getFilteredShortcuts();
+      const banner = el('filterResultCount');
+      const countEl = el('filteredCount');
+      const totalEl = el('totalCount');
+
+      if (!banner) return;
+
+      // Show banner only when filters are active
+      const hasActiveFilter = state.searchQuery ||
+        state.filterMode !== 'all' ||
+        state.languageFilter !== 'all';
+
+      if (hasActiveFilter) {
+        banner.style.display = 'flex';
+        // Show capped count if over RENDER_CHUNK_SIZE
+        const displayCount = Math.min(filtered.length, CONFIG.RENDER_CHUNK_SIZE);
+        countEl.textContent = displayCount;
+        totalEl.textContent = filtered.length;
+        // Update banner text based on whether results are capped
+        if (filtered.length > CONFIG.RENDER_CHUNK_SIZE) {
+          countEl.parentElement.innerHTML = `Showing <span class="count" id="filteredCount">${displayCount}</span> of <span id="totalCount">${filtered.length}</span> results`;
+        }
+      } else {
+        banner.style.display = 'none';
+      }
+    }
+
+    /**
+     * Sets up event delegation for filter chips and search
+     * Call once during initialization
+     */
+    function setupFilterDelegation() {
+      // Search input event listener
+      const searchInput = el('searchInput');
+      if (searchInput) {
+        searchInput.addEventListener('input', handleSearch);
+      }
+
+      // Clear search button
+      const btnClearSearch = el('btnClearSearch');
+      if (btnClearSearch) {
+        btnClearSearch.addEventListener('click', clearSearch);
+      }
+
+      // Clear all filters button
+      const btnClearAll = el('btnClearAllFilters');
+      if (btnClearAll) {
+        btnClearAll.addEventListener('click', clearAllFilters);
+      }
+
+      // Category filters (event delegation)
+      const categoryFilters = el('categoryFilters');
+      if (categoryFilters) {
+        categoryFilters.addEventListener('click', (e) => {
+          const chip = e.target.closest('[data-filter-type="category"]');
+          if (chip) {
+            state.filterMode = chip.dataset.filter;
+            updateChipActiveState(categoryFilters, chip);
+            render();
+            updateFilterCount();
+          }
+        });
+      }
+
+      // Language filters (event delegation)
+      const languageFilters = el('languageFilters');
+      if (languageFilters) {
+        languageFilters.addEventListener('click', (e) => {
+          const chip = e.target.closest('[data-filter-type="language"]');
+          if (chip) {
+            state.languageFilter = chip.dataset.filter;
+            updateChipActiveState(languageFilters, chip);
+            render();
+            updateFilterCount();
+          }
+        });
+      }
+
+      if (CONFIG.DEBUG) console.log('[FilterDelegation] Set up on filter chips and search');
+    }
+
+    // Legacy function for backward compatibility (if any inline onclick remain)
     function handleFilterClick(chip, filter) {
       state.filterMode = filter;
 
@@ -1930,6 +2171,7 @@
       chip.classList.add('active');
 
       render();
+      updateFilterCount();
     }
 
     // ========================================================================
