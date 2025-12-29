@@ -16,7 +16,7 @@ This project supports **Jules**, an AI-powered coding assistant CLI. Use it to c
 
 | Script | Command | Description |
 |--------|---------|-------------|
-| `npm run jules:new` | `jules new` | Start a new AI coding session in the current directory. |
+| `npm run jules:new -- "Task description"` | `jules new "Task description"` | Start a new AI coding session (**Description required**). |
 | `npm run jules:remote` | `jules remote list` | List your active remote sessions. |
 | `npm run jules:logout` | `jules logout` | Sign out of Jules. |
 
