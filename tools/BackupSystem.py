@@ -211,7 +211,8 @@ def get_backup_status():
                 try:
                     timestamp_str = f.replace(f"{BACKUP_PREFIX}_", "").replace(".json", "")
                     backup_date = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
-                except:
+                except ValueError:
+                    # Fallback to file modification time if timestamp parsing fails
                     backup_date = datetime.fromtimestamp(stat.st_mtime)
                 
                 backups.append({
@@ -376,24 +377,40 @@ def verify_backup(filepath):
 # %%
 def cleanup_old_backups():
     """Remove old backups to maintain rotation! 🧹"""
+    if not os.path.exists(BACKUP_FOLDER):
+        print("   ⚠️ Backup folder doesn't exist yet")
+        return
+    
     backups = []
-    for f in os.listdir(BACKUP_FOLDER):
-        if f.startswith(BACKUP_PREFIX) and f.endswith('.json'):
-            filepath = os.path.join(BACKUP_FOLDER, f)
-            stat = os.stat(filepath)
-            backups.append({'filename': f, 'mtime': stat.st_mtime, 'filepath': filepath})
+    try:
+        for f in os.listdir(BACKUP_FOLDER):
+            if f.startswith(BACKUP_PREFIX) and f.endswith('.json'):
+                filepath = os.path.join(BACKUP_FOLDER, f)
+                try:
+                    stat = os.stat(filepath)
+                    backups.append({'filename': f, 'mtime': stat.st_mtime, 'filepath': filepath})
+                except OSError as e:
+                    print(f"   ⚠️ Could not stat {f}: {e}")
+    except OSError as e:
+        print(f"   ❌ Error reading backup folder: {e}")
+        return
     
     backups.sort(key=lambda x: x['mtime'])
     
     while len(backups) > MAX_BACKUPS_TO_KEEP:
         oldest = backups.pop(0)
-        os.remove(oldest['filepath'])
-        csv_path = oldest['filepath'].replace('.json', '.csv')
-        if os.path.exists(csv_path):
-            os.remove(csv_path)
-        print(f"   🗑️ Removed: {oldest['filename']}")
+        try:
+            os.remove(oldest['filepath'])
+            csv_path = oldest['filepath'].replace('.json', '.csv')
+            if os.path.exists(csv_path):
+                os.remove(csv_path)
+            print(f"   🗑️ Removed: {oldest['filename']}")
+        except OSError as e:
+            print(f"   ⚠️ Could not remove {oldest['filename']}: {e}")
     
-    remaining = len([f for f in os.listdir(BACKUP_FOLDER) if f.endswith('.json')])
+    # Count only backup files with proper prefix
+    remaining = len([f for f in os.listdir(BACKUP_FOLDER) 
+                    if f.endswith('.json') and f.startswith(BACKUP_PREFIX)])
     print(f"   ✅ Keeping {remaining} backups")
 
 # %% [markdown]
@@ -436,17 +453,29 @@ def detect_changes():
 def list_available_backups():
     """List all available backups! 📋"""
     backups = []
-    for f in os.listdir(BACKUP_FOLDER):
-        if f.startswith(BACKUP_PREFIX) and f.endswith('.json'):
-            filepath = os.path.join(BACKUP_FOLDER, f)
-            with open(filepath, 'r') as file:
-                backup = json.load(file)
-            backups.append({
-                'filename': f,
-                'filepath': filepath,
-                'date': backup['metadata'].get('backup_date', 'Unknown'),
-                'rows': backup['metadata'].get('row_count', 0)
-            })
+    
+    if not os.path.exists(BACKUP_FOLDER):
+        print("⚠️ Backup folder doesn't exist!")
+        return backups
+    
+    try:
+        for f in os.listdir(BACKUP_FOLDER):
+            if f.startswith(BACKUP_PREFIX) and f.endswith('.json'):
+                filepath = os.path.join(BACKUP_FOLDER, f)
+                try:
+                    with open(filepath, 'r', encoding='utf-8') as file:
+                        backup = json.load(file)
+                    backups.append({
+                        'filename': f,
+                        'filepath': filepath,
+                        'date': backup['metadata'].get('backup_date', 'Unknown'),
+                        'rows': backup['metadata'].get('row_count', 0)
+                    })
+                except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
+                    print(f"   ⚠️ Skipping corrupted backup {f}: {e}")
+    except OSError as e:
+        print(f"❌ Error reading backup folder: {e}")
+        return backups
     
     backups.sort(key=lambda x: x['date'], reverse=True)
     
@@ -454,7 +483,8 @@ def list_available_backups():
     print("📋 AVAILABLE BACKUPS")
     print("=" * 70)
     for i, b in enumerate(backups):
-        print(f"  {i+1}. {b['date'][:19]} | {b['rows']} rows | {b['filename']}")
+        date_display = b['date'][:19] if len(b['date']) >= 19 else b['date']
+        print(f"  {i+1}. {date_display} | {b['rows']} rows | {b['filename']}")
     print("=" * 70)
     
     return backups
@@ -484,9 +514,13 @@ def restore_from_backup(backup_number=None, create_safety_backup=True):
         create_backup(include_csv=False)
     
     print("\n⚠️ This will OVERWRITE your spreadsheet!")
-    confirm = input("Type 'RESTORE' to confirm: ")
+    try:
+        confirm = input("Type 'RESTORE' to confirm: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print("\n❌ Cancelled.")
+        return False
     
-    if confirm.upper() != 'RESTORE':
+    if not confirm or confirm.upper() != 'RESTORE':
         print("❌ Cancelled.")
         return False
     
@@ -570,5 +604,8 @@ if __name__ == "__main__":
         answer = input("> ").strip().lower()
         if answer == 'y':
             create_backup()
-    except:
+    except (EOFError, KeyboardInterrupt):
+        print("\n💡 Run create_backup() manually to create a backup!")
+    except Exception as e:
+        print(f"\n⚠️ Input error: {e}")
         print("💡 Run create_backup() manually to create a backup!")
