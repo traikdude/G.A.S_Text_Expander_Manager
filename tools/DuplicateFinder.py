@@ -98,12 +98,18 @@ SPREADSHEET_ID = "17NaZQTbIm8LEiO2VoQoIn5HpqGEQKGAIUXN81SGnZJQ"
 SHEET_NAME = "Shortcuts"
 OUTPUT_FOLDER = "/content" if IN_COLAB else str(Path.cwd())
 
-spreadsheet = gc.open_by_key(SPREADSHEET_ID)
-worksheet = spreadsheet.worksheet(SHEET_NAME)
-data = worksheet.get_all_records()
-df = pd.DataFrame(data)
+# Initialize dataframe
+df = None
 
-print(f"✅ Loaded {len(df)} shortcuts!")
+try:
+    spreadsheet = gc.open_by_key(SPREADSHEET_ID)
+    worksheet = spreadsheet.worksheet(SHEET_NAME)
+    data = worksheet.get_all_records()
+    df = pd.DataFrame(data)
+    print(f"✅ Loaded {len(df)} shortcuts!")
+except Exception as e:
+    print(f"❌ Error loading spreadsheet: {e}")
+    print("💡 Make sure you've shared the spreadsheet with your service account!")
 
 # %% [markdown]
 # ## Step 4: Find Exact Duplicates 🔄

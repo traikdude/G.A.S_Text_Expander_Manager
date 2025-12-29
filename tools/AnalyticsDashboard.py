@@ -103,16 +103,23 @@ SPREADSHEET_ID = "17NaZQTbIm8LEiO2VoQoIn5HpqGEQKGAIUXN81SGnZJQ"
 SHEET_NAME = "Shortcuts"
 OUTPUT_FOLDER = "/content" if IN_COLAB else str(Path.cwd())
 
-spreadsheet = gc.open_by_key(SPREADSHEET_ID)
-worksheet = spreadsheet.worksheet(SHEET_NAME)
-data = worksheet.get_all_records()
-df = pd.DataFrame(data)
+# Initialize dataframe
+df = None
 
-# Add computed columns
-df['content_length'] = df['Content'].astype(str).str.len() if 'Content' in df.columns else 0
-df['name_length'] = df['Snippet Name'].astype(str).str.len() if 'Snippet Name' in df.columns else 0
-
-print(f"✅ Loaded {len(df)} shortcuts!")
+try:
+    spreadsheet = gc.open_by_key(SPREADSHEET_ID)
+    worksheet = spreadsheet.worksheet(SHEET_NAME)
+    data = worksheet.get_all_records()
+    df = pd.DataFrame(data)
+    
+    # Add computed columns
+    df['content_length'] = df['Content'].astype(str).str.len() if 'Content' in df.columns else 0
+    df['name_length'] = df['Snippet Name'].astype(str).str.len() if 'Snippet Name' in df.columns else 0
+    
+    print(f"✅ Loaded {len(df)} shortcuts!")
+except Exception as e:
+    print(f"❌ Error loading spreadsheet: {e}")
+    print("💡 Make sure you've shared the spreadsheet with your service account!")
 
 # %% [markdown]
 # ## Step 4: Overview Dashboard 📊
