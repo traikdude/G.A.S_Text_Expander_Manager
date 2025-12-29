@@ -20,6 +20,24 @@ import os
 import subprocess
 from pathlib import Path
 
+# Fix Windows console encoding for emojis
+def safe_print(text):
+    """Print with fallback for Windows console encoding issues."""
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        # Remove emojis for Windows console
+        import re
+        clean_text = re.sub(r'[\U0001F000-\U0001F9FF\U00002700-\U000027BF]', '', text)
+        print(clean_text)
+
+# Set UTF-8 mode for Windows if possible
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except (AttributeError, Exception):
+        pass  # Python < 3.7 or reconfigure not available
+
 
 class ColabCompat:
     """
@@ -55,14 +73,14 @@ class ColabCompat:
         self._gc = None  # Cached gspread client
         
     def print_environment(self):
-        """Print detected environment info! 🔍"""
-        env_type = "🌐 Google Colab" if self.in_colab else "💻 Local Python"
-        print(f"\n{'='*50}")
-        print(f"🔍 Environment Detected: {env_type}")
-        print(f"📁 Base Path: {self.base_path}")
-        print(f"💾 Backup Path: {self.backup_path}")
-        print(f"🐍 Python: {sys.version.split()[0]}")
-        print(f"{'='*50}\n")
+        """Print detected environment info!"""
+        env_type = "Google Colab" if self.in_colab else "Local Python"
+        safe_print(f"\n{'='*50}")
+        safe_print(f"Environment Detected: {env_type}")
+        safe_print(f"Base Path: {self.base_path}")
+        safe_print(f"Backup Path: {self.backup_path}")
+        safe_print(f"Python: {sys.version.split()[0]}")
+        safe_print(f"{'='*50}\n")
     
     def install_packages(self, packages: list):
         """
