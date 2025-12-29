@@ -20,10 +20,16 @@ my-gas-project/
 
 ## 🛠️ Tech Stack
 
-- **Runtime:** Google Apps Script (V8)
+- ![Hybrid](https://img.shields.io/badge/Architecture-Hybrid%20(GAS%20%2B%20Python)-blueviolet)
+![Jules](https://img.shields.io/badge/AI-Jules%20CLI-orange)
+![Google Apps Script](https://img.shields.io/badge/google%20apps%20script-v8-4285F4?logo=google-cloud&logoColor=white)
 - **Local Dev:** [clasp](https://github.com/google/clasp)
 - **Cloud:** Google Cloud Platform (GCP)
 - **VCS:** Git & GitHub
+
+## 🤖 Jules CLI Integration
+This project accepts **Jules CLI** sessions for AI-assisted development.
+See [Jules Workflow Docs](docs/JULES_WORKFLOW.md) for setup and usage instructions.
 
 ## 🚀 Workflow
 

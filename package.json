@@ -1,0 +1,25 @@
+{
+  "name": "gas-text-expander",
+  "version": "1.0.0",
+  "description": "Google Apps Script Text Expander Manager with Python Analytics",
+  "main": "Code.gs",
+  "scripts": {
+    "jules:new": "jules new",
+    "jules:login": "jules login",
+    "jules:logout": "jules logout",
+    "jules:remote": "jules remote list",
+    "clasp:push": "clasp push",
+    "clasp:pull": "clasp pull"
+  },
+  "keywords": [
+    "google-apps-script",
+    "python",
+    "jules",
+    "productivity"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google/clasp": "^2.4.2"
+  }
+}
