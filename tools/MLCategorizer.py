@@ -4,42 +4,57 @@
 Machine Learning-powered categorization using scikit-learn! 🤖
 Smarter than regex - learns from your existing categorizations! ✨
 
+🌐 Works in BOTH:
+   - Google Colab (recommended for ML)
+   - Local Python (python MLCategorizer.py)
+
 Spreadsheet: Shortcuts
 ID: 17NaZQTbIm8LEiO2VoQoIn5HpqGEQKGAIUXN81SGnZJQ
-
-Run in Google Colab for best results! 🚀
 """
 
 # %% [markdown]
-# # 🧠 ML-Powered Categorizer
-# Uses machine learning to categorize shortcuts more intelligently! 🤖
-# 
-# **How it works:**
-# 1. 📚 Learns from your existing categorized shortcuts
-# 2. 🧪 Trains a text classification model
-# 3. 🎯 Predicts categories for uncategorized items
-# 4. 📊 Shows confidence scores for each prediction
-#
-# **Advantages over regex:**
-# - ✅ Handles edge cases better
-# - ✅ Learns from your manual corrections
-# - ✅ Improves with more training data
-# - ✅ Understands context, not just patterns
+# # 🧠 ML Categorizer
+# Train a machine learning model on your categorized shortcuts!
 
 # %% [markdown]
-# ## Step 1: Setup & Dependencies 🔐
+# ## Step 1: Setup 🔍
 
 # %%
-# Install ML libraries! 📦
-!pip install gspread google-auth pandas numpy scikit-learn matplotlib seaborn -q
+import sys
+import os
+import subprocess
 
-print("✅ Packages installed! 📦")
+IN_COLAB = 'google.colab' in sys.modules
+print(f"🔍 Environment: {'🌐 Colab' if IN_COLAB else '💻 Local'}")
 
 # %%
-# Import everything! 🎁
+def ensure_packages():
+    required = ['gspread', 'pandas', 'scikit-learn', 'matplotlib', 'seaborn']
+    for pkg in required:
+        pkg_import = pkg.replace('-', '_') if pkg == 'scikit-learn' else pkg
+        if pkg == 'scikit-learn':
+            pkg_import = 'sklearn'
+        try:
+            __import__(pkg_import)
+        except ImportError:
+            print(f"📦 Installing {pkg}...")
+            if IN_COLAB:
+                from IPython import get_ipython
+                get_ipython().system(f'pip install {pkg} -q')
+            else:
+                subprocess.run([sys.executable, '-m', 'pip', 'install', pkg, '-q'], capture_output=True)
+    print("✅ Packages ready!")
+
+ensure_packages()
+
+# %%
 import gspread
 import pandas as pd
 import numpy as np
+from pathlib import Path
+import warnings
+warnings.filterwarnings('ignore')
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.ensemble import RandomForestClassifier
@@ -48,100 +63,110 @@ from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.pipeline import Pipeline
 import matplotlib.pyplot as plt
 import seaborn as sns
-from google.colab import auth
-from google.auth import default
-import warnings
-warnings.filterwarnings('ignore')
 
-print("✅ ML libraries imported! 🧠")
-
-# %%
-# Authenticate! 🔑
-auth.authenticate_user()
-creds, _ = default()
-gc = gspread.authorize(creds)
-
-print("✅ Authenticated! 🔐")
+print("✅ Libraries imported!")
 
 # %% [markdown]
-# ## Step 2: Load Data 📥
+# ## Step 2: Authentication 🔐
 
 # %%
-# Configuration! 📋
+if IN_COLAB:
+    from google.colab import auth
+    from google.auth import default
+    auth.authenticate_user()
+    creds, _ = default()
+    gc = gspread.authorize(creds)
+else:
+    creds_file = Path("credentials.json")
+    gspread_creds = Path.home() / ".config" / "gspread" / "credentials.json"
+    
+    if creds_file.exists():
+        from google.oauth2.service_account import Credentials
+        scopes = ['https://www.googleapis.com/auth/spreadsheets']
+        creds = Credentials.from_service_account_file(str(creds_file), scopes=scopes)
+        gc = gspread.authorize(creds)
+    elif gspread_creds.exists():
+        from google.oauth2.service_account import Credentials
+        scopes = ['https://www.googleapis.com/auth/spreadsheets']
+        creds = Credentials.from_service_account_file(str(gspread_creds), scopes=scopes)
+        gc = gspread.authorize(creds)
+    else:
+        gc = gspread.oauth()
+
+print("✅ Authenticated!")
+
+# %% [markdown]
+# ## Step 3: Load Data 📥
+
+# %%
 SPREADSHEET_ID = "17NaZQTbIm8LEiO2VoQoIn5HpqGEQKGAIUXN81SGnZJQ"
 SHEET_NAME = "Shortcuts"
+OUTPUT_FOLDER = "/content" if IN_COLAB else str(Path.cwd())
 
-# Connect and load! 🔗
 spreadsheet = gc.open_by_key(SPREADSHEET_ID)
 worksheet = spreadsheet.worksheet(SHEET_NAME)
 data = worksheet.get_all_records()
 df = pd.DataFrame(data)
 
-print(f"✅ Loaded {len(df)} shortcuts! 🎉")
+print(f"✅ Loaded {len(df)} shortcuts!")
 
-# Check for MainCategory column
-if 'MainCategory' not in df.columns:
-    print("⚠️ MainCategory column not found!")
-    print("   Run TextExpanderCategorizer.py first to create initial categories!")
+# Check for existing categories
+if 'MainCategory' in df.columns:
+    categorized = df['MainCategory'].notna() & (df['MainCategory'] != '')
+    print(f"📊 Categorized: {categorized.sum()} / {len(df)}")
 else:
-    print(f"   Categories found: {df['MainCategory'].nunique()}")
+    print("⚠️ No MainCategory column - run TextExpanderCategorizer.py first!")
 
 # %% [markdown]
-# ## Step 3: Prepare Training Data 📊
+# ## Step 4: Prepare Training Data 📚
 
 # %%
-def prepare_training_data(df):
+def prepare_training_data(min_samples=5):
     """Prepare data for ML training! 📚"""
-    
-    print("=" * 60)
+    print("\n" + "=" * 60)
     print("📚 PREPARING TRAINING DATA")
     print("=" * 60)
     
-    # Combine text features for richer context! 📝
-    df['combined_text'] = (
-        df['Content'].fillna('').astype(str) + ' ' +
-        df['Snippet Name'].fillna('').astype(str) + ' ' +
-        df['Description'].fillna('').astype(str) + ' ' +
-        df['Tags'].fillna('').astype(str)
-    )
-    
-    # Filter to only categorized rows for training! 🎯
-    if 'MainCategory' in df.columns:
-        categorized = df[
-            (df['MainCategory'].notna()) & 
-            (df['MainCategory'] != '') &
-            (df['MainCategory'] != 'Uncategorized')
-        ].copy()
-        
-        uncategorized = df[
-            (df['MainCategory'].isna()) | 
-            (df['MainCategory'] == '') |
-            (df['MainCategory'] == 'Uncategorized')
-        ].copy()
-    else:
-        print("❌ No MainCategory column found!")
+    if 'MainCategory' not in df.columns:
+        print("❌ No MainCategory column!")
         return None, None, None
     
-    print(f"\n📊 Data Split:")
-    print(f"   Categorized (training): {len(categorized)}")
-    print(f"   Uncategorized (to predict): {len(uncategorized)}")
+    # Combine text features
+    df['combined_text'] = df.apply(
+        lambda row: f"{row.get('Content', '')} {row.get('Description', '')} {row.get('Snippet Name', '')}",
+        axis=1
+    )
     
-    # Show category distribution! 📈
-    print(f"\n🏷️ Category Distribution:")
-    cat_counts = categorized['MainCategory'].value_counts()
-    for cat, count in cat_counts.items():
-        print(f"   {cat}: {count}")
+    # Filter to categorized rows
+    df_cat = df[df['MainCategory'].notna() & (df['MainCategory'] != '')].copy()
     
-    return df, categorized, uncategorized
+    print(f"📊 Categorized rows: {len(df_cat)}")
+    
+    # Filter categories with enough samples
+    cat_counts = df_cat['MainCategory'].value_counts()
+    valid_cats = cat_counts[cat_counts >= min_samples].index.tolist()
+    
+    df_train = df_cat[df_cat['MainCategory'].isin(valid_cats)]
+    df_predict = df[~df.index.isin(df_train.index) | (df['MainCategory'] == '')]
+    
+    print(f"✅ Training samples: {len(df_train)}")
+    print(f"🎯 To predict: {len(df_predict)}")
+    print(f"📋 Valid categories: {len(valid_cats)}")
+    
+    return df, df_train, df_predict
 
-df_all, df_train, df_predict = prepare_training_data(df)
+df_all, df_train, df_predict = prepare_training_data()
 
 # %% [markdown]
-# ## Step 4: Train the ML Model 🧠
+# ## Step 5: Train ML Model 🧠
 
 # %%
-def train_categorizer(df_train, min_samples=5):
-    """Train a machine learning categorizer! 🧠"""
+model = None
+valid_categories = None
+
+def train_model():
+    """Train the ML categorizer! 🧠"""
+    global model, valid_categories
     
     print("\n" + "=" * 60)
     print("🧠 TRAINING ML MODEL")
@@ -149,321 +174,156 @@ def train_categorizer(df_train, min_samples=5):
     
     if df_train is None or len(df_train) < 10:
         print("❌ Not enough training data!")
-        print("   Need at least 10 categorized shortcuts to train.")
-        return None, None, None
+        return None
     
-    # Filter out categories with too few samples! 📊
-    cat_counts = df_train['MainCategory'].value_counts()
-    valid_cats = cat_counts[cat_counts >= min_samples].index.tolist()
+    X = df_train['combined_text'].astype(str)
+    y = df_train['MainCategory']
     
-    df_filtered = df_train[df_train['MainCategory'].isin(valid_cats)].copy()
+    valid_categories = y.unique().tolist()
     
-    print(f"📊 Training on {len(valid_cats)} categories with ≥{min_samples} samples")
-    print(f"   Total training samples: {len(df_filtered)}")
+    # Split data
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     
-    # Prepare features and labels! 📝
-    X = df_filtered['combined_text'].values
-    y = df_filtered['MainCategory'].values
+    print(f"📊 Training set: {len(X_train)}")
+    print(f"📊 Test set: {len(X_test)}")
     
-    # Split for validation! 🧪
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
-    
-    print(f"\n🧪 Train/Test Split:")
-    print(f"   Training samples: {len(X_train)}")
-    print(f"   Testing samples: {len(X_test)}")
-    
-    # Create ML pipeline! 🔧
-    pipeline = Pipeline([
-        ('tfidf', TfidfVectorizer(
-            max_features=5000,
-            ngram_range=(1, 2),
-            min_df=2,
-            max_df=0.95
-        )),
-        ('classifier', MultinomialNB(alpha=0.1))
+    # Create pipeline
+    model = Pipeline([
+        ('tfidf', TfidfVectorizer(max_features=1000, ngram_range=(1, 2))),
+        ('clf', MultinomialNB())
     ])
     
-    # Train! 🚀
-    print("\n🏋️ Training model...")
-    pipeline.fit(X_train, y_train)
+    # Train
+    print("\n⏳ Training...")
+    model.fit(X_train, y_train)
     
-    # Evaluate! 📈
-    train_score = pipeline.score(X_train, y_train)
-    test_score = pipeline.score(X_test, y_test)
+    # Evaluate
+    train_acc = model.score(X_train, y_train)
+    test_acc = model.score(X_test, y_test)
     
-    print(f"\n📊 Model Performance:")
-    print(f"   Training Accuracy: {train_score:.1%}")
-    print(f"   Testing Accuracy: {test_score:.1%}")
+    print(f"\n📈 Training Accuracy: {train_acc:.1%}")
+    print(f"📈 Test Accuracy: {test_acc:.1%}")
     
-    # Cross-validation! 🔄
-    cv_scores = cross_val_score(pipeline, X, y, cv=5)
-    print(f"   Cross-Val Accuracy: {cv_scores.mean():.1%} (±{cv_scores.std():.1%})")
+    # Cross-validation
+    cv_scores = cross_val_score(model, X, y, cv=5)
+    print(f"📊 Cross-val Score: {cv_scores.mean():.1%} (+/- {cv_scores.std()*2:.1%})")
     
-    # Detailed classification report! 📋
-    y_pred = pipeline.predict(X_test)
-    print(f"\n📋 Classification Report:")
-    print(classification_report(y_test, y_pred, zero_division=0))
-    
-    return pipeline, valid_cats, (X_test, y_test, y_pred)
+    return model
 
-model, valid_categories, test_data = train_categorizer(df_train)
+model = train_model()
 
 # %% [markdown]
-# ## Step 5: Visualize Performance 📊
+# ## Step 6: Predict Uncategorized 🎯
 
 # %%
-def plot_confusion_matrix(test_data, valid_categories):
-    """Plot confusion matrix! 📊"""
-    
-    if test_data is None:
-        print("⚠️ No test data available!")
-        return
-    
-    X_test, y_test, y_pred = test_data
-    
-    print("\n" + "=" * 60)
-    print("📊 CONFUSION MATRIX")
-    print("=" * 60)
-    
-    # Create confusion matrix! 🎯
-    cm = confusion_matrix(y_test, y_pred, labels=valid_categories)
-    
-    # Plot! 🎨
-    fig, ax = plt.subplots(figsize=(12, 10))
-    
-    sns.heatmap(
-        cm, 
-        annot=True, 
-        fmt='d', 
-        cmap='Blues',
-        xticklabels=[c[:20] for c in valid_categories],
-        yticklabels=[c[:20] for c in valid_categories],
-        ax=ax
-    )
-    
-    ax.set_xlabel('Predicted', fontsize=12)
-    ax.set_ylabel('Actual', fontsize=12)
-    ax.set_title('🎯 Confusion Matrix', fontsize=14, fontweight='bold')
-    
-    plt.xticks(rotation=45, ha='right')
-    plt.yticks(rotation=0)
-    plt.tight_layout()
-    plt.show()
-    
-    print("✅ Confusion matrix rendered! 📈")
+predictions_df = None
 
-plot_confusion_matrix(test_data, valid_categories)
-
-# %% [markdown]
-# ## Step 6: Predict Uncategorized Items 🎯
-
-# %%
-def predict_uncategorized(model, df_predict, df_all):
+def predict_uncategorized():
     """Predict categories for uncategorized items! 🎯"""
+    global predictions_df
     
     print("\n" + "=" * 60)
-    print("🎯 PREDICTING UNCATEGORIZED ITEMS")
+    print("🎯 PREDICTING CATEGORIES")
     print("=" * 60)
     
     if model is None:
-        print("❌ No trained model available!")
+        print("❌ Train model first!")
         return None
     
     if df_predict is None or len(df_predict) == 0:
-        print("✅ All items are already categorized! 🎉")
+        print("✅ All items already categorized!")
         return None
     
-    print(f"📋 Items to predict: {len(df_predict)}")
+    X_pred = df_predict['combined_text'].astype(str)
     
-    # Prepare text! 📝
-    X_predict = df_predict['combined_text'].values
+    # Predict with probabilities
+    predictions = model.predict(X_pred)
+    probabilities = model.predict_proba(X_pred).max(axis=1)
     
-    # Predict categories! 🤖
-    predictions = model.predict(X_predict)
-    probabilities = model.predict_proba(X_predict)
+    predictions_df = df_predict.copy()
+    predictions_df['predicted_category'] = predictions
+    predictions_df['confidence'] = probabilities
     
-    # Get confidence scores! 📊
-    max_probs = probabilities.max(axis=1)
+    # Summary
+    high_conf = (probabilities >= 0.7).sum()
+    low_conf = (probabilities < 0.5).sum()
     
-    # Create results DataFrame! 📋
-    results = df_predict[['Snippet Name', 'Content']].copy()
-    results['predicted_category'] = predictions
-    results['confidence'] = max_probs
-    results['row_index'] = df_predict.index + 2  # +2 for header + 0-index
+    print(f"\n📊 Predictions made: {len(predictions_df)}")
+    print(f"✅ High confidence (≥70%): {high_conf}")
+    print(f"⚠️ Low confidence (<50%): {low_conf}")
     
-    # Sort by confidence! 📈
-    results = results.sort_values('confidence', ascending=False)
+    print("\n📋 Sample Predictions:")
+    print("-" * 60)
+    for _, row in predictions_df.head(5).iterrows():
+        print(f"  '{row.get('Snippet Name', '')[:30]}' → {row['predicted_category']} ({row['confidence']:.0%})")
     
-    print(f"\n📊 Prediction Summary:")
-    print(f"   High confidence (>80%): {len(results[results['confidence'] >= 0.8])}")
-    print(f"   Medium confidence (50-80%): {len(results[(results['confidence'] >= 0.5) & (results['confidence'] < 0.8)])}")
-    print(f"   Low confidence (<50%): {len(results[results['confidence'] < 0.5])}")
-    
-    # Show top predictions! 🔝
-    print(f"\n🔝 Top 15 Predictions (Highest Confidence):")
-    print("-" * 70)
-    
-    for idx, row in results.head(15).iterrows():
-        snippet = row['Snippet Name'][:30] if len(row['Snippet Name']) > 30 else row['Snippet Name']
-        cat = row['predicted_category'][:25]
-        conf = row['confidence']
-        print(f"   Row {row['row_index']}: {snippet:30} → {cat:25} ({conf:.1%})")
-    
-    return results
+    return predictions_df
 
-predictions = predict_uncategorized(model, df_predict, df_all)
+predictions_df = predict_uncategorized()
 
 # %% [markdown]
-# ## Step 7: Review Low-Confidence Predictions ⚠️
+# ## Step 7: Review Low Confidence ⚠️
 
 # %%
-def review_low_confidence(predictions, threshold=0.5):
-    """Review predictions that need manual attention! ⚠️"""
-    
-    if predictions is None:
+def review_low_confidence(threshold=0.5):
+    """Review low confidence predictions! ⚠️"""
+    if predictions_df is None:
+        print("❌ No predictions yet!")
         return
     
-    print("\n" + "=" * 60)
-    print("⚠️ LOW CONFIDENCE PREDICTIONS (Need Review)")
-    print("=" * 60)
+    low_conf = predictions_df[predictions_df['confidence'] < threshold]
     
-    low_conf = predictions[predictions['confidence'] < threshold]
+    print(f"\n⚠️ {len(low_conf)} items need manual review:")
+    print("-" * 60)
     
-    if len(low_conf) == 0:
-        print(f"✅ All predictions have ≥{threshold:.0%} confidence! 🎉")
-        return
-    
-    print(f"📋 {len(low_conf)} items need manual review:")
-    print("-" * 70)
-    
-    for idx, row in low_conf.head(20).iterrows():
-        snippet = row['Snippet Name'][:25]
-        content = str(row['Content'])[:30]
-        cat = row['predicted_category'][:20]
-        conf = row['confidence']
-        
-        print(f"   Row {row['row_index']}: '{snippet}...'")
-        print(f"      Content: {content}...")
-        print(f"      Suggested: {cat} ({conf:.1%} confidence)")
-        print()
+    for _, row in low_conf.head(10).iterrows():
+        print(f"  '{row.get('Snippet Name', '')[:25]}' → {row['predicted_category']} ({row['confidence']:.0%})")
 
-review_low_confidence(predictions, threshold=0.5)
+review_low_confidence()
 
 # %% [markdown]
-# ## Step 8: Apply Predictions to Sheet 📝
+# ## Step 8: Export Predictions 📤
 
 # %%
-def apply_predictions(worksheet, predictions, min_confidence=0.7):
-    """Apply high-confidence predictions to the spreadsheet! 📝"""
-    
-    print("\n" + "=" * 60)
-    print("📝 APPLY PREDICTIONS TO SPREADSHEET")
-    print("=" * 60)
-    
-    if predictions is None or len(predictions) == 0:
-        print("⚠️ No predictions to apply!")
-        return
-    
-    # Filter by confidence! 🎯
-    high_conf = predictions[predictions['confidence'] >= min_confidence]
-    
-    print(f"📊 Predictions Summary:")
-    print(f"   Total predictions: {len(predictions)}")
-    print(f"   Above {min_confidence:.0%} confidence: {len(high_conf)}")
-    
-    if len(high_conf) == 0:
-        print(f"⚠️ No predictions meet the {min_confidence:.0%} confidence threshold!")
-        return
-    
-    # Confirmation! ⚠️
-    confirm = input(f"\n⚠️ Apply {len(high_conf)} predictions to spreadsheet? Type 'YES' to confirm: ")
-    
-    if confirm.upper() != 'YES':
-        print("❌ Cancelled. No changes made.")
-        return
-    
-    # Get column index for MainCategory! 📋
-    headers = worksheet.row_values(1)
-    
-    if 'MainCategory' not in headers:
-        print("❌ MainCategory column not found!")
-        return
-    
-    main_cat_col = headers.index('MainCategory') + 1
-    
-    # Apply predictions! 🚀
-    print(f"\n🚀 Applying {len(high_conf)} predictions...")
-    
-    updates = []
-    for idx, row in high_conf.iterrows():
-        cell = gspread.utils.rowcol_to_a1(int(row['row_index']), main_cat_col)
-        updates.append({
-            'range': cell,
-            'values': [[row['predicted_category']]]
-        })
-    
-    # Batch update in chunks! 📦
-    batch_size = 100
-    for i in range(0, len(updates), batch_size):
-        batch = updates[i:i+batch_size]
-        worksheet.batch_update(batch)
-        print(f"   ✓ Applied rows {i+1} to {min(i+batch_size, len(updates))}")
-    
-    print(f"\n✅ Successfully applied {len(high_conf)} ML predictions! 🎉")
-    print("   Open your spreadsheet to verify the changes.")
-
-# Uncomment to apply:
-# apply_predictions(worksheet, predictions, min_confidence=0.7)
-
-print("💡 To apply predictions, uncomment and run the apply_predictions() call above!")
-
-# %% [markdown]
-# ## Step 9: Export Results 📤
-
-# %%
-def export_predictions(predictions):
+def export_predictions():
     """Export predictions to CSV! 📤"""
-    
-    if predictions is None:
+    if predictions_df is None:
+        print("❌ No predictions to export!")
         return
     
-    print("\n" + "=" * 60)
-    print("📤 EXPORTING PREDICTIONS")
-    print("=" * 60)
+    output_file = os.path.join(OUTPUT_FOLDER, "ml_predictions.csv")
     
-    # Save to CSV! 💾
-    predictions.to_csv('/content/ml_predictions.csv', index=False)
+    export_cols = ['Snippet Name', 'Content', 'predicted_category', 'confidence']
+    available_cols = [c for c in export_cols if c in predictions_df.columns]
     
-    print(f"✅ Saved {len(predictions)} predictions to ml_predictions.csv")
+    predictions_df[available_cols].to_csv(output_file, index=False)
+    print(f"✅ Exported to: {output_file}")
     
-    # Download! 📥
-    from google.colab import files
-    files.download('/content/ml_predictions.csv')
-    
-    print("📥 Download started!")
+    if IN_COLAB:
+        from google.colab import files
+        files.download(output_file)
 
-export_predictions(predictions)
+export_predictions()
 
 # %% [markdown]
-# ## 🎉 ML Categorization Complete!
-# 
-# Your ML categorizer has been trained and predictions generated! 🧠
-# 
-# **What happened:**
-# 1. ✅ Trained on your existing categorized shortcuts
-# 2. ✅ Evaluated model performance
-# 3. ✅ Generated predictions for uncategorized items
-# 4. ✅ Exported results for review
-# 
-# **Next Steps:**
-# 1. Review the predictions CSV file 📋
-# 2. Verify high-confidence predictions look correct ✅
-# 3. Uncomment `apply_predictions()` to write to spreadsheet 📝
-# 4. Manually fix low-confidence items ⚠️
-# 
-# **Tips for better accuracy:**
-# - More training data = better predictions! 📈
-# - Fix incorrect predictions and re-train! 🔄
-# - Categories with few samples may have lower accuracy ⚠️
+# ## 🎯 Quick Menu
+
+# %%
+def show_menu():
+    print("""
+╔═══════════════════════════════════════════════════════╗
+║         🧠 ML CATEGORIZER                             ║
+╠═══════════════════════════════════════════════════════╣
+║  prepare_training_data()      - Prepare data          ║
+║  train_model()                - Train ML model        ║
+║  predict_uncategorized()      - Make predictions      ║
+║  review_low_confidence(0.5)   - Review uncertain      ║
+║  export_predictions()         - Export to CSV         ║
+╚═══════════════════════════════════════════════════════╝
+    """)
+
+show_menu()
+
+# %%
+if __name__ == "__main__":
+    print("\n🎉 ML Categorizer ready!")

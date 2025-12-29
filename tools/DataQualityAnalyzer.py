@@ -1,575 +1,340 @@
 """
-🏥 Text Expander Data Quality Analyzer
+📊 Text Expander Data Quality Analyzer
 ======================================
-Comprehensive data health check for your shortcuts spreadsheet! 📊
-Identifies missing fields, empty values, and data quality issues! 🔍
+Comprehensive data health check for your shortcuts! 🏥
+Finds missing fields, empty values, and quality issues! 🔍
+
+🌐 Works in BOTH:
+   - Google Colab (with rich visualizations)
+   - Local Python (python DataQualityAnalyzer.py)
 
 Spreadsheet: Shortcuts
 ID: 17NaZQTbIm8LEiO2VoQoIn5HpqGEQKGAIUXN81SGnZJQ
-
-Run in Google Colab for best results! 🚀
 """
 
 # %% [markdown]
-# # 🏥 Text Expander Data Quality Analyzer
-# This notebook performs a comprehensive health check on your shortcuts data! ✨
-# 
-# **Features:**
-# - 📊 Overall statistics and metrics
-# - ❌ Missing field detection
-# - 🔍 Empty value finder
-# - 📏 Content length analysis
-# - 🏷️ Tag coverage report
-# - 🌍 Language distribution
-# - 📈 Category balance check
-# - 📋 Actionable fix recommendations
+# # 📊 Data Quality Analyzer
+# Comprehensive health check for your shortcuts database!
 
 # %% [markdown]
-# ## Step 1: Setup & Authentication 🔐
+# ## Step 1: Setup 🔍
 
 # %%
-# Install required packages! 📦
-!pip install gspread google-auth pandas numpy matplotlib seaborn -q
+import sys
+import os
+import subprocess
 
-print("✅ Packages installed successfully! 📦")
+IN_COLAB = 'google.colab' in sys.modules
+print(f"🔍 Environment: {'🌐 Colab' if IN_COLAB else '💻 Local'}")
 
 # %%
-# Import all the goodies! 🎁
+def ensure_packages():
+    required = ['gspread', 'pandas', 'matplotlib', 'seaborn']
+    for pkg in required:
+        try:
+            __import__(pkg)
+        except ImportError:
+            print(f"📦 Installing {pkg}...")
+            if IN_COLAB:
+                from IPython import get_ipython
+                get_ipython().system(f'pip install {pkg} -q')
+            else:
+                subprocess.run([sys.executable, '-m', 'pip', 'install', pkg, '-q'], capture_output=True)
+    print("✅ Packages ready!")
+
+ensure_packages()
+
+# %%
 import gspread
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from google.colab import auth
-from google.auth import default
+from pathlib import Path
 from collections import Counter
 import warnings
 warnings.filterwarnings('ignore')
 
-# Set beautiful plot style! 🎨
 plt.style.use('seaborn-v0_8-whitegrid')
 sns.set_palette("husl")
 
-print("✅ Libraries imported! Ready to analyze! 🚀")
-
-# %%
-# Authenticate with Google! 🔑
-auth.authenticate_user()
-creds, _ = default()
-gc = gspread.authorize(creds)
-
-print("✅ Authentication successful! 🔐")
+print("✅ Libraries imported!")
 
 # %% [markdown]
-# ## Step 2: Connect & Load Data 📥
+# ## Step 2: Authentication 🔐
 
 # %%
-# Spreadsheet configuration! 📋
+if IN_COLAB:
+    from google.colab import auth
+    from google.auth import default
+    auth.authenticate_user()
+    creds, _ = default()
+    gc = gspread.authorize(creds)
+else:
+    creds_file = Path("credentials.json")
+    gspread_creds = Path.home() / ".config" / "gspread" / "credentials.json"
+    
+    if creds_file.exists():
+        from google.oauth2.service_account import Credentials
+        scopes = ['https://www.googleapis.com/auth/spreadsheets']
+        creds = Credentials.from_service_account_file(str(creds_file), scopes=scopes)
+        gc = gspread.authorize(creds)
+    elif gspread_creds.exists():
+        from google.oauth2.service_account import Credentials
+        scopes = ['https://www.googleapis.com/auth/spreadsheets']
+        creds = Credentials.from_service_account_file(str(gspread_creds), scopes=scopes)
+        gc = gspread.authorize(creds)
+    else:
+        gc = gspread.oauth()
+
+print("✅ Authenticated!")
+
+# %% [markdown]
+# ## Step 3: Load Data 📥
+
+# %%
 SPREADSHEET_ID = "17NaZQTbIm8LEiO2VoQoIn5HpqGEQKGAIUXN81SGnZJQ"
 SHEET_NAME = "Shortcuts"
+OUTPUT_FOLDER = "/content" if IN_COLAB else str(Path.cwd())
 
-# Connect to spreadsheet! 🔗
-try:
-    spreadsheet = gc.open_by_key(SPREADSHEET_ID)
-    worksheet = spreadsheet.worksheet(SHEET_NAME)
-    print(f"✅ Connected to '{spreadsheet.title}'! 📊")
-    print(f"   Sheet: '{SHEET_NAME}'")
-    print(f"   Size: {worksheet.row_count} rows × {worksheet.col_count} columns")
-except Exception as e:
-    print(f"❌ Connection failed: {e}")
-
-# %%
-# Load all data into DataFrame! 📊
+spreadsheet = gc.open_by_key(SPREADSHEET_ID)
+worksheet = spreadsheet.worksheet(SHEET_NAME)
 data = worksheet.get_all_records()
 df = pd.DataFrame(data)
 
-print(f"✅ Loaded {len(df)} shortcuts successfully! 🎉")
-print(f"\n📋 Columns found: {list(df.columns)}")
+print(f"✅ Loaded {len(df)} shortcuts!")
+print(f"📋 Columns: {list(df.columns)}")
 
 # %% [markdown]
-# ## Step 3: 📊 Overall Statistics Dashboard
+# ## Step 4: Overview Statistics 📈
 
 # %%
-def generate_overview_stats(df):
-    """Generate comprehensive overview statistics! 📈"""
-    
+def generate_overview():
+    """Generate overview statistics! 📈"""
     print("=" * 60)
-    print("📊 DATA QUALITY DASHBOARD")
+    print("📊 DATA QUALITY OVERVIEW")
     print("=" * 60)
     
-    stats = {
-        '📋 Total Shortcuts': len(df),
-        '📏 Columns Available': len(df.columns),
-    }
+    total = len(df)
+    print(f"\n📦 Total Records: {total}")
+    print(f"📋 Total Columns: {len(df.columns)}")
     
-    # Core field analysis! 🔍
-    core_fields = ['Snippet Name', 'Content', 'Application', 'Description', 'Language', 'Tags']
+    # Check each column
+    print("\n📊 Column Statistics:")
+    print("-" * 60)
     
-    print("\n🔍 CORE FIELD ANALYSIS:")
-    print("-" * 40)
-    
-    for field in core_fields:
-        if field in df.columns:
-            empty_count = df[field].isna().sum() + (df[field] == '').sum()
-            filled_count = len(df) - empty_count
-            fill_rate = (filled_count / len(df)) * 100
-            
-            # Emoji based on fill rate! 🎨
-            if fill_rate >= 90:
-                status = "✅"
-            elif fill_rate >= 70:
-                status = "🟡"
-            elif fill_rate >= 50:
-                status = "🟠"
-            else:
-                status = "❌"
-            
-            print(f"  {status} {field}: {filled_count}/{len(df)} ({fill_rate:.1f}% filled)")
-    
-    # Enhanced fields (if available)! ✨
-    enhanced_fields = ['MainCategory', 'Subcategory', 'FontStyle', 'Platform', 'UsageFrequency']
-    available_enhanced = [f for f in enhanced_fields if f in df.columns]
-    
-    if available_enhanced:
-        print("\n✨ ENHANCED FIELD ANALYSIS:")
-        print("-" * 40)
+    stats = []
+    for col in df.columns:
+        filled = df[col].notna().sum()
+        empty = df[col].isna().sum() + (df[col] == '').sum()
+        fill_rate = (total - empty) / total * 100
         
-        for field in available_enhanced:
-            empty_count = df[field].isna().sum() + (df[field] == '').sum()
-            filled_count = len(df) - empty_count
-            fill_rate = (filled_count / len(df)) * 100
-            
-            if fill_rate >= 90:
-                status = "✅"
-            elif fill_rate >= 70:
-                status = "🟡"
-            else:
-                status = "❌"
-            
-            print(f"  {status} {field}: {filled_count}/{len(df)} ({fill_rate:.1f}% filled)")
-    else:
-        print("\n⚠️ Enhanced fields not yet added (run DropdownEnhancements first)!")
+        print(f"  {col[:30]:<30} | {fill_rate:>5.1f}% filled | {empty} empty")
+        stats.append({'Column': col, 'Filled %': fill_rate, 'Empty': empty})
     
-    return stats
+    return pd.DataFrame(stats)
 
-overview = generate_overview_stats(df)
+overview = generate_overview()
 
 # %% [markdown]
-# ## Step 4: ❌ Missing Field Report
+# ## Step 5: Missing Field Analysis ❌
 
 # %%
-def analyze_missing_fields(df):
-    """Find all rows with missing critical data! 🔍"""
+def analyze_missing():
+    """Find rows with missing critical data! ❌"""
+    critical = ['Snippet Name', 'Content']
+    available_critical = [c for c in critical if c in df.columns]
     
     print("\n" + "=" * 60)
-    print("❌ MISSING FIELD REPORT")
+    print("❌ MISSING FIELD ANALYSIS")
     print("=" * 60)
     
     issues = []
-    
-    # Check each critical field! 🔎
-    critical_fields = {
-        'Snippet Name': 'No snippet name - cannot identify!',
-        'Content': 'No content - shortcut is useless!',
-        'Description': 'No description - harder to categorize',
-        'Language': 'No language - filtering limited',
-        'Tags': 'No tags - search limited',
-    }
-    
-    for field, impact in critical_fields.items():
-        if field in df.columns:
-            missing = df[(df[field].isna()) | (df[field] == '')]
-            if len(missing) > 0:
-                issues.append({
-                    'field': field,
-                    'count': len(missing),
-                    'impact': impact,
-                    'rows': missing.index.tolist()[:10]  # First 10 rows
-                })
-                print(f"\n❌ {field}: {len(missing)} missing")
-                print(f"   Impact: {impact}")
-                if len(missing) <= 5:
-                    for idx, row in missing.head().iterrows():
-                        name = row.get('Snippet Name', f'Row {idx+2}')
-                        print(f"   → Row {idx+2}: {name[:50]}...")
+    for col in available_critical:
+        missing = df[(df[col].isna()) | (df[col] == '')]
+        if len(missing) > 0:
+            print(f"\n⚠️ {col}: {len(missing)} missing")
+            for idx, row in missing.head(5).iterrows():
+                issues.append({'Row': idx + 2, 'Column': col, 'Issue': 'Missing'})
     
     if not issues:
-        print("\n✅ No critical missing fields found! 🎉")
+        print("\n✅ No critical missing fields!")
     
-    return issues
+    return pd.DataFrame(issues) if issues else None
 
-missing_report = analyze_missing_fields(df)
+missing_report = analyze_missing()
 
 # %% [markdown]
-# ## Step 5: 📏 Content Length Analysis
+# ## Step 6: Content Length Analysis 📏
 
 # %%
-def analyze_content_length(df):
+def analyze_content_length():
     """Analyze content length distribution! 📏"""
+    if 'Content' not in df.columns:
+        print("❌ No Content column found!")
+        return
+    
+    df['content_length'] = df['Content'].astype(str).str.len()
     
     print("\n" + "=" * 60)
     print("📏 CONTENT LENGTH ANALYSIS")
     print("=" * 60)
     
-    if 'Content' not in df.columns:
-        print("❌ Content column not found!")
-        return
+    print(f"\n📊 Statistics:")
+    print(f"   Min: {df['content_length'].min()} chars")
+    print(f"   Max: {df['content_length'].max()} chars")
+    print(f"   Mean: {df['content_length'].mean():.1f} chars")
+    print(f"   Median: {df['content_length'].median():.1f} chars")
     
-    df['content_length'] = df['Content'].astype(str).str.len()
-    
-    print(f"\n📊 Length Statistics:")
-    print(f"   📈 Mean length: {df['content_length'].mean():.1f} characters")
-    print(f"   📉 Min length: {df['content_length'].min()} characters")
-    print(f"   📈 Max length: {df['content_length'].max()} characters")
-    print(f"   📊 Median: {df['content_length'].median():.1f} characters")
-    
-    # Find extremes! ⚠️
-    very_short = df[df['content_length'] < 3]
-    very_long = df[df['content_length'] > 1000]
-    
+    # Very short content (potential issues)
+    very_short = df[df['content_length'] <= 1]
     if len(very_short) > 0:
-        print(f"\n⚠️ Very Short Snippets (<3 chars): {len(very_short)}")
-        for idx, row in very_short.head(5).iterrows():
-            print(f"   → '{row['Snippet Name']}': '{row['Content']}'")
+        print(f"\n⚠️ Very short content (≤1 char): {len(very_short)} items")
     
+    # Very long content
+    very_long = df[df['content_length'] > 500]
     if len(very_long) > 0:
-        print(f"\n📦 Long Snippets (>1000 chars): {len(very_long)}")
-        for idx, row in very_long.head(5).iterrows():
-            print(f"   → '{row['Snippet Name']}': {row['content_length']} chars")
-    
-    # Create histogram! 📊
-    fig, ax = plt.subplots(figsize=(10, 5))
-    
-    # Filter out extreme outliers for visualization
-    plot_data = df[df['content_length'] < 500]['content_length']
-    
-    ax.hist(plot_data, bins=50, color='#667eea', edgecolor='white', alpha=0.8)
-    ax.set_xlabel('Content Length (characters)', fontsize=12)
-    ax.set_ylabel('Number of Shortcuts', fontsize=12)
-    ax.set_title('📏 Content Length Distribution', fontsize=14, fontweight='bold')
-    ax.axvline(df['content_length'].mean(), color='red', linestyle='--', label=f'Mean: {df["content_length"].mean():.1f}')
-    ax.legend()
-    
-    plt.tight_layout()
-    plt.show()
-    
-    print("\n✅ Histogram generated! 📈")
+        print(f"📝 Long content (>500 chars): {len(very_long)} items")
 
-analyze_content_length(df)
+analyze_content_length()
 
 # %% [markdown]
-# ## Step 6: 🌍 Language Distribution
+# ## Step 7: Quality Score 🏆
 
 # %%
-def analyze_language_distribution(df):
-    """Analyze language distribution! 🌍"""
-    
-    print("\n" + "=" * 60)
-    print("🌍 LANGUAGE DISTRIBUTION")
-    print("=" * 60)
-    
-    if 'Language' not in df.columns:
-        print("❌ Language column not found!")
-        return
-    
-    # Clean and count languages! 📊
-    df['lang_clean'] = df['Language'].fillna('(empty)').replace('', '(empty)')
-    lang_counts = df['lang_clean'].value_counts()
-    
-    print(f"\n📊 Languages Found: {len(lang_counts)}")
-    print("-" * 40)
-    
-    for lang, count in lang_counts.items():
-        pct = (count / len(df)) * 100
-        bar = '█' * int(pct / 5) + '▒' * (20 - int(pct / 5))
-        print(f"  {lang:20} {bar} {count:5} ({pct:5.1f}%)")
-    
-    # Pie chart! 🥧
-    fig, ax = plt.subplots(figsize=(8, 8))
-    colors = plt.cm.Set3(np.linspace(0, 1, len(lang_counts)))
-    
-    # Only show top 5 in pie, rest as "Other"
-    top_langs = lang_counts.head(5)
-    if len(lang_counts) > 5:
-        other_count = lang_counts[5:].sum()
-        top_langs['Other'] = other_count
-    
-    ax.pie(top_langs, labels=top_langs.index, autopct='%1.1f%%', colors=colors, startangle=90)
-    ax.set_title('🌍 Language Distribution', fontsize=14, fontweight='bold')
-    
-    plt.tight_layout()
-    plt.show()
-
-analyze_language_distribution(df)
-
-# %% [markdown]
-# ## Step 7: 🏷️ Category Coverage (if available)
-
-# %%
-def analyze_category_coverage(df):
-    """Analyze MainCategory coverage! 🏷️"""
-    
-    print("\n" + "=" * 60)
-    print("🏷️ CATEGORY COVERAGE ANALYSIS")
-    print("=" * 60)
-    
-    if 'MainCategory' not in df.columns:
-        print("⚠️ MainCategory column not found!")
-        print("   Run the TextExpanderCategorizer notebook first! 🐍")
-        return
-    
-    # Clean and count! 📊
-    df['cat_clean'] = df['MainCategory'].fillna('(uncategorized)').replace('', '(uncategorized)')
-    cat_counts = df['cat_clean'].value_counts()
-    
-    print(f"\n📊 Categories Found: {len(cat_counts)}")
-    print("-" * 50)
-    
-    for cat, count in cat_counts.items():
-        pct = (count / len(df)) * 100
-        bar = '█' * int(pct / 2) + '▒' * (50 - int(pct / 2))
-        emoji = cat[0] if cat and cat[0] in '🎯🔣😊📅🔢💬📧🎨🌈🏷️' else '❓'
-        print(f"  {emoji} {cat[:35]:35} {count:5} ({pct:5.1f}%)")
-    
-    # Check for uncategorized! ⚠️
-    uncategorized = df[df['cat_clean'] == '(uncategorized)']
-    if len(uncategorized) > 0:
-        print(f"\n⚠️ Uncategorized Shortcuts: {len(uncategorized)}")
-        print("   These need manual categorization or re-running the categorizer!")
-
-analyze_category_coverage(df)
-
-# %% [markdown]
-# ## Step 8: 📋 Data Quality Score
-
-# %%
-def calculate_quality_score(df):
+def calculate_quality_score():
     """Calculate overall data quality score! 🏆"""
-    
     print("\n" + "=" * 60)
-    print("🏆 OVERALL DATA QUALITY SCORE")
+    print("🏆 DATA QUALITY SCORE")
     print("=" * 60)
     
     scores = {}
     
-    # Score each dimension (0-100)! 📊
+    # Completeness (40%)
+    total_cells = len(df) * len(df.columns)
+    filled_cells = df.notna().sum().sum() - (df == '').sum().sum()
+    completeness = filled_cells / total_cells * 100
+    scores['Completeness'] = completeness
     
-    # 1. Completeness - are all fields filled? 📋
-    core_fields = ['Snippet Name', 'Content', 'Description', 'Language', 'Tags']
-    available_fields = [f for f in core_fields if f in df.columns]
-    
-    completeness_scores = []
-    for field in available_fields:
-        filled = len(df) - df[field].isna().sum() - (df[field] == '').sum()
-        completeness_scores.append((filled / len(df)) * 100)
-    
-    scores['📋 Completeness'] = np.mean(completeness_scores) if completeness_scores else 0
-    
-    # 2. Uniqueness - no duplicates? 🔄
+    # Content validity (30%)
     if 'Content' in df.columns:
-        unique_ratio = df['Content'].nunique() / len(df) * 100
-        scores['🔄 Uniqueness'] = unique_ratio
+        valid_content = df['Content'].apply(lambda x: len(str(x)) > 0).sum()
+        content_validity = valid_content / len(df) * 100
+    else:
+        content_validity = 100
+    scores['Content Validity'] = content_validity
     
-    # 3. Validity - content length reasonable? ✅
-    if 'Content' in df.columns:
-        df['_len'] = df['Content'].astype(str).str.len()
-        valid = len(df[(df['_len'] >= 1) & (df['_len'] <= 10000)])
-        scores['✅ Validity'] = (valid / len(df)) * 100
+    # Name uniqueness (30%)
+    if 'Snippet Name' in df.columns:
+        unique_ratio = df['Snippet Name'].nunique() / len(df) * 100
+    else:
+        unique_ratio = 100
+    scores['Uniqueness'] = unique_ratio
     
-    # 4. Categorization - if available 🏷️
-    if 'MainCategory' in df.columns:
-        categorized = len(df[(df['MainCategory'].notna()) & (df['MainCategory'] != '')])
-        scores['🏷️ Categorized'] = (categorized / len(df)) * 100
-    
-    # Calculate overall! 🎯
-    overall = np.mean(list(scores.values()))
+    # Calculate weighted score
+    overall = (completeness * 0.4 + content_validity * 0.3 + unique_ratio * 0.3)
     
     print(f"\n📊 Dimension Scores:")
-    print("-" * 40)
+    for dim, score in scores.items():
+        bar = "█" * int(score / 5) + "░" * (20 - int(score / 5))
+        print(f"   {dim:<20} [{bar}] {score:.1f}%")
     
-    for dimension, score in scores.items():
-        bar = '█' * int(score / 5) + '░' * (20 - int(score / 5))
-        grade = '🟢' if score >= 80 else '🟡' if score >= 60 else '🔴'
-        print(f"  {grade} {dimension}: {bar} {score:.1f}%")
+    print(f"\n🏆 OVERALL QUALITY: {overall:.1f}%")
     
-    print(f"\n{'='*40}")
-    
-    # Overall grade with emoji! 🏆
     if overall >= 90:
-        grade_emoji = "🏆"
-        grade_text = "EXCELLENT"
+        print("   Grade: A+ Excellent! 🌟")
     elif overall >= 80:
-        grade_emoji = "🥇"
-        grade_text = "GREAT"
+        print("   Grade: A Good! ✅")
     elif overall >= 70:
-        grade_emoji = "🥈"
-        grade_text = "GOOD"
-    elif overall >= 60:
-        grade_emoji = "🥉"
-        grade_text = "FAIR"
+        print("   Grade: B Fair ⚠️")
     else:
-        grade_emoji = "📈"
-        grade_text = "NEEDS WORK"
-    
-    print(f"  {grade_emoji} OVERALL SCORE: {overall:.1f}% - {grade_text}")
-    print(f"{'='*40}")
+        print("   Grade: C Needs Improvement 🔧")
     
     return overall, scores
 
-quality_score, dimension_scores = calculate_quality_score(df)
+quality_score, dimension_scores = calculate_quality_score()
 
 # %% [markdown]
-# ## Step 9: 📋 Actionable Recommendations
+# ## Step 8: Recommendations 💡
 
 # %%
-def generate_recommendations(df):
-    """Generate actionable fix recommendations! 💡"""
-    
+def generate_recommendations():
+    """Generate actionable recommendations! 💡"""
     print("\n" + "=" * 60)
-    print("💡 ACTIONABLE RECOMMENDATIONS")
+    print("💡 RECOMMENDATIONS")
     print("=" * 60)
     
-    recommendations = []
+    recs = []
     
-    # Check each issue and recommend! 🔧
-    
-    # 1. Missing descriptions? ❌
+    # Check for missing descriptions
     if 'Description' in df.columns:
-        missing_desc = len(df[(df['Description'].isna()) | (df['Description'] == '')])
-        if missing_desc > 0:
-            recommendations.append({
-                'priority': '🔴 HIGH',
-                'issue': f'{missing_desc} shortcuts missing descriptions',
-                'action': 'Run auto-categorizer or manually add descriptions',
-                'impact': 'Improves filtering and searchability'
-            })
+        missing_desc = (df['Description'].isna() | (df['Description'] == '')).sum()
+        if missing_desc > len(df) * 0.1:
+            recs.append(f"📝 Add descriptions to {missing_desc} shortcuts")
     
-    # 2. Missing tags? 🏷️
-    if 'Tags' in df.columns:
-        missing_tags = len(df[(df['Tags'].isna()) | (df['Tags'] == '')])
-        if missing_tags > 0:
-            pct = (missing_tags / len(df)) * 100
-            priority = '🔴 HIGH' if pct > 50 else '🟡 MEDIUM' if pct > 20 else '🟢 LOW'
-            recommendations.append({
-                'priority': priority,
-                'issue': f'{missing_tags} shortcuts missing tags ({pct:.1f}%)',
-                'action': 'Use Smart Tag Generator notebook',
-                'impact': 'Improves search functionality'
-            })
-    
-    # 3. Missing language? 🌍
-    if 'Language' in df.columns:
-        missing_lang = len(df[(df['Language'].isna()) | (df['Language'] == '')])
-        if missing_lang > 0:
-            recommendations.append({
-                'priority': '🟡 MEDIUM',
-                'issue': f'{missing_lang} shortcuts missing language',
-                'action': 'Use Language Detection notebook',
-                'impact': 'Enables language-based filtering'
-            })
-    
-    # 4. Missing categories? 🏷️
+    # Check for missing categories
     if 'MainCategory' in df.columns:
-        missing_cat = len(df[(df['MainCategory'].isna()) | (df['MainCategory'] == '')])
+        missing_cat = (df['MainCategory'].isna() | (df['MainCategory'] == '')).sum()
         if missing_cat > 0:
-            recommendations.append({
-                'priority': '🔴 HIGH',
-                'issue': f'{missing_cat} shortcuts uncategorized',
-                'action': 'Re-run TextExpanderCategorizer with fixes',
-                'impact': 'Essential for new filter UI'
-            })
-    elif 'MainCategory' not in df.columns:
-        recommendations.append({
-            'priority': '🔴 HIGH',
-            'issue': 'MainCategory column not yet added',
-            'action': 'Run clasp push, then Add Enhanced Dropdowns in spreadsheet',
-            'impact': 'Required for category-based filtering'
-        })
+            recs.append(f"🏷️ Categorize {missing_cat} uncategorized shortcuts")
     
-    # Print recommendations! 📋
-    if recommendations:
-        for i, rec in enumerate(recommendations, 1):
-            print(f"\n{rec['priority']} Recommendation #{i}:")
-            print(f"   Issue: {rec['issue']}")
-            print(f"   Action: {rec['action']}")
-            print(f"   Impact: {rec['impact']}")
+    # Check for duplicates
+    if 'Content' in df.columns:
+        dups = df['Content'].duplicated().sum()
+        if dups > 0:
+            recs.append(f"🔍 Review {dups} duplicate content items")
+    
+    if recs:
+        for i, rec in enumerate(recs, 1):
+            print(f"   {i}. {rec}")
     else:
-        print("\n✅ No critical issues found! Your data is in great shape! 🎉")
+        print("   ✅ No major issues found!")
     
-    return recommendations
+    return recs
 
-recommendations = generate_recommendations(df)
+recommendations = generate_recommendations()
 
 # %% [markdown]
-# ## Step 10: 📊 Export Quality Report
+# ## Step 9: Export Report 📤
 
 # %%
-def export_quality_report(df, quality_score):
-    """Export comprehensive quality report! 📤"""
+def export_report():
+    """Export quality report! 📤"""
+    report_file = os.path.join(OUTPUT_FOLDER, "data_quality_report.csv")
     
-    print("\n" + "=" * 60)
-    print("📤 EXPORTING QUALITY REPORT")
-    print("=" * 60)
+    report_data = {
+        'Metric': ['Total Records', 'Quality Score', 'Completeness', 'Content Validity', 'Uniqueness'],
+        'Value': [len(df), f"{quality_score:.1f}%", f"{dimension_scores['Completeness']:.1f}%", 
+                  f"{dimension_scores['Content Validity']:.1f}%", f"{dimension_scores['Uniqueness']:.1f}%"]
+    }
     
-    # Create summary DataFrame! 📊
-    report_data = []
+    pd.DataFrame(report_data).to_csv(report_file, index=False)
+    print(f"\n✅ Report exported to: {report_file}")
     
-    for idx, row in df.iterrows():
-        issues = []
-        
-        # Check each field
-        if pd.isna(row.get('Description')) or row.get('Description') == '':
-            issues.append('Missing Description')
-        if pd.isna(row.get('Tags')) or row.get('Tags') == '':
-            issues.append('Missing Tags')
-        if pd.isna(row.get('Language')) or row.get('Language') == '':
-            issues.append('Missing Language')
-        if 'MainCategory' in df.columns:
-            if pd.isna(row.get('MainCategory')) or row.get('MainCategory') == '':
-                issues.append('Missing Category')
-        
-        content_len = len(str(row.get('Content', '')))
-        if content_len < 3:
-            issues.append('Very Short Content')
-        if content_len > 5000:
-            issues.append('Very Long Content')
-        
-        report_data.append({
-            'Row': idx + 2,
-            'Snippet Name': row.get('Snippet Name', '')[:50],
-            'Content Length': content_len,
-            'Issues Count': len(issues),
-            'Issues': ', '.join(issues) if issues else 'None'
-        })
-    
-    report_df = pd.DataFrame(report_data)
-    
-    # Save to CSV! 💾
-    report_df.to_csv('/content/data_quality_report.csv', index=False)
-    
-    # Also save rows with issues only
-    issues_df = report_df[report_df['Issues Count'] > 0]
-    issues_df.to_csv('/content/rows_with_issues.csv', index=False)
-    
-    print(f"✅ Full report saved: data_quality_report.csv")
-    print(f"✅ Issues report saved: rows_with_issues.csv ({len(issues_df)} rows)")
-    
-    # Download files! 📥
-    from google.colab import files
-    files.download('/content/data_quality_report.csv')
-    files.download('/content/rows_with_issues.csv')
-    
-    return report_df
+    if IN_COLAB:
+        from google.colab import files
+        files.download(report_file)
 
-report_df = export_quality_report(df, quality_score)
+export_report()
 
 # %% [markdown]
-# ## 🎉 Analysis Complete!
-# 
-# Your data quality report has been generated! 📊
-# 
-# **Next Steps:**
-# 1. Review the downloaded CSV files 📋
-# 2. Fix high-priority issues first 🔴
-# 3. Re-run the categorizer if needed 🏷️
-# 4. Run this analyzer again to track improvement! 📈
+# ## 🎯 Quick Menu
+
+# %%
+def show_menu():
+    print("""
+╔═══════════════════════════════════════════════════════╗
+║         📊 DATA QUALITY ANALYZER                      ║
+╠═══════════════════════════════════════════════════════╣
+║  generate_overview()          - Show statistics       ║
+║  analyze_missing()            - Find missing data     ║
+║  calculate_quality_score()    - Get quality score     ║
+║  generate_recommendations()   - Get recommendations   ║
+║  export_report()              - Export report         ║
+╚═══════════════════════════════════════════════════════╝
+    """)
+
+show_menu()
+
+# %%
+if __name__ == "__main__":
+    print("\n🎉 Data Quality Analyzer ready!")
