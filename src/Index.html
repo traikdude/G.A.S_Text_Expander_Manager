@@ -493,6 +493,27 @@
       color: #c5221f;
     }
 
+    /* Enhanced category badges (v2.0) */
+    .meta-tag.category {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      font-size: 14px;
+      padding: 2px 6px;
+      border-radius: 50%;
+      min-width: 24px;
+      text-align: center;
+    }
+
+    .meta-tag.subcat {
+      background: #e8f5e9;
+      color: #2e7d32;
+      font-size: 10px;
+      max-width: 100px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     /* ========================================================================
        EMPTY STATE
        ======================================================================== */
@@ -1350,6 +1371,7 @@
       filterMode: 'all',
       languageFilter: 'all',        // 'all' | 'spanish' | 'english'
       typeFilter: 'all',             // 'all' | 'dates' | 'numbers' | 'greetings' | etc. (filters on description)
+      mainCategoryFilter: 'all',     // 'all' | emoji-prefixed main category (v2.0)
       searchDebounceTimer: null,    // Timer ID for debounced search
       editingKey: null,
       importMode: 'csv',
@@ -1386,6 +1408,21 @@
       'zodiac': ['zodiac', 'astrology', 'horoscope', 'signs', 'astrological'],
       'general': ['general', 'misc', 'miscellaneous', 'other', ''],
     };
+
+    // Main Category options for enhanced filtering (v2.0)
+    const MAIN_CATEGORY_OPTIONS = [
+      { value: 'all', label: '🌐 All Categories', emoji: '🌐' },
+      { value: '🎯 Text Formatting', label: '🎯 Text Formatting', emoji: '🎯' },
+      { value: '🔣 Symbols & Special Characters', label: '🔣 Symbols', emoji: '🔣' },
+      { value: '😊 Emojis & Emoticons', label: '😊 Emojis', emoji: '😊' },
+      { value: '📅 Dates & Time', label: '📅 Dates', emoji: '📅' },
+      { value: '🔢 Numbers & Counting', label: '🔢 Numbers', emoji: '🔢' },
+      { value: '💬 Communication & Greetings', label: '💬 Communication', emoji: '💬' },
+      { value: '📧 Contact & Personal Info', label: '📧 Contact', emoji: '📧' },
+      { value: '🎨 Decorative Elements', label: '🎨 Decorative', emoji: '🎨' },
+      { value: '🌈 Color Indicators', label: '🌈 Colors', emoji: '🌈' },
+      { value: '🏷️ Status & Labels', label: '🏷️ Status', emoji: '🏷️' },
+    ];
 
     // ========================================================================
     // MOBILE FILTER COLLAPSE TOGGLE
@@ -2149,6 +2186,13 @@
       const favoriteClass = shortcut.favorite ? 'active' : '';
       const favoriteTitle = escapeHtml(shortcut.favorite ? 'Remove from favorites' : 'Add to favorites');
 
+      // Enhanced dropdown fields (v2.0)
+      const mainCategoryHtml = escapeHtml(shortcut.mainCategory || '');
+      const subcategoryHtml = escapeHtml(shortcut.subcategory || '');
+
+      // Extract emoji from mainCategory for badge display
+      const categoryEmoji = mainCategoryHtml ? mainCategoryHtml.charAt(0) : '';
+
       return `
         <div class="shortcut-card" data-id="${idAttr}">
           <div class="shortcut-card-header">
@@ -2168,6 +2212,8 @@
           </div>
           <div class="shortcut-expansion">${expansionHtml}</div>
           <div class="shortcut-meta">
+            ${mainCategoryHtml ? `<span class="meta-tag category" title="${mainCategoryHtml}">${categoryEmoji}</span>` : ''}
+            ${subcategoryHtml ? `<span class="meta-tag subcat">${subcategoryHtml}</span>` : ''}
             ${applicationHtml ? `<span class="meta-tag app">${applicationHtml}</span>` : ''}
             ${languageHtml ? `<span class="meta-tag lang">${languageHtml}</span>` : ''}
           </div>
@@ -2198,6 +2244,14 @@
     function getFilteredShortcuts() {
       let filtered = state.shortcuts;
 
+      // Apply main category filter (v2.0 - filters on MainCategory column)
+      if (state.mainCategoryFilter !== 'all') {
+        filtered = filtered.filter(s => {
+          const mainCat = (s.mainCategory || '').trim();
+          return mainCat === state.mainCategoryFilter;
+        });
+      }
+
       // Apply type filter (v18 Fix: uses CATEGORY_FILTER_MAP for flexible matching)
       if (state.typeFilter !== 'all') {
         const matchingValues = CATEGORY_FILTER_MAP[state.typeFilter] || [state.typeFilter];
@@ -2226,7 +2280,7 @@
         });
       }
 
-      // Apply search filter (scans key, expansion, tags, description)
+      // Apply search filter (scans key, expansion, tags, description, and new fields)
       if (state.searchQuery) {
         const query = state.searchQuery.toLowerCase();
         filtered = filtered.filter(s =>
@@ -2235,7 +2289,10 @@
           (s.tags && s.tags.toLowerCase().includes(query)) ||
           (s.description && s.description.toLowerCase().includes(query)) ||
           (s.application && s.application.toLowerCase().includes(query)) ||
-          (s.language && s.language.toLowerCase().includes(query))
+          (s.language && s.language.toLowerCase().includes(query)) ||
+          // Enhanced fields (v2.0)
+          (s.mainCategory && s.mainCategory.toLowerCase().includes(query)) ||
+          (s.subcategory && s.subcategory.toLowerCase().includes(query))
         );
       }
 

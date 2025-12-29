@@ -51,6 +51,12 @@ const HEADERS_SHORTCUTS = [
   'Language',
   'Tags',
   'UpdatedAt',
+  // Enhanced dropdown columns (v2.0)
+  'MainCategory',
+  'Subcategory',
+  'FontStyle',
+  'Platform',
+  'UsageFrequency',
 ];
 
 const HEADERS_FAVORITES = [
@@ -158,6 +164,9 @@ function onOpen(e) {
     )
     .addSubMenu(ui.createMenu('⚙️ Setup')
       .addItem('📋 Add Category Dropdown to Description', 'addCategoryDropdown')
+      .addSeparator()
+      .addItem('🔽 Add Enhanced Dropdowns (5 columns)', 'addEnhancedDropdowns')
+      .addItem('💾 Create Shortcuts Backup', 'createShortcutsBackup')
     )
     .addSeparator()
     .addItem('🔄 Warm Cache (10k+)', 'warmShortcutsCache')
@@ -310,6 +319,12 @@ function getShortcutsFromSheet_() {
     language: idx['Language'],
     tags: idx['Tags'],
     updatedAt: idx['UpdatedAt'],
+    // Enhanced dropdown columns (v2.0) - optional for backward compatibility
+    mainCategory: idx['MainCategory'],
+    subcategory: idx['Subcategory'],
+    fontStyle: idx['FontStyle'],
+    platform: idx['Platform'],
+    usageFrequency: idx['UsageFrequency'],
   };
 
   const out = [];
@@ -333,6 +348,12 @@ function getShortcutsFromSheet_() {
       language: String(data[i][col.language] || ''),
       tags: String(data[i][col.tags] || ''),
       updatedAt: String(data[i][col.updatedAt] || ''),
+      // Enhanced dropdown fields (empty string if column doesn't exist yet)
+      mainCategory: col.mainCategory !== undefined ? String(data[i][col.mainCategory] || '') : '',
+      subcategory: col.subcategory !== undefined ? String(data[i][col.subcategory] || '') : '',
+      fontStyle: col.fontStyle !== undefined ? String(data[i][col.fontStyle] || '') : '',
+      platform: col.platform !== undefined ? String(data[i][col.platform] || '') : '',
+      usageFrequency: col.usageFrequency !== undefined ? String(data[i][col.usageFrequency] || '') : '',
     });
   }
   return out;
