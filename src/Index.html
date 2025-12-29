@@ -1160,11 +1160,11 @@
 
         <!-- Filter Chips Container (collapsed by default on mobile) -->
         <div class="filter-chips-wrapper collapsed" id="filterChipsWrapper">
-          <!-- Category Filter Chips -->
+          <!-- Category Filter Chips (Dynamic) -->
           <div class="filter-chips" id="categoryFilters">
             <span class="filter-label">Category:</span>
-            <div class="chip active" data-filter="all" data-filter-type="category">📋 All</div>
-            <div class="chip" data-filter="favorites" data-filter-type="category">⭐ Favorites</div>
+            <!-- Dynamic content will be injected here by renderCategoryFilters() -->
+            <div class="chip active" data-filter="all" data-filter-type="category">Loading...</div>
           </div>
 
           <!-- Language Filter Chips -->
@@ -1588,8 +1588,107 @@
     }
 
     // ========================================================================
+    // DYNAMIC CATEGORY SYSTEM (v9.0)
+    // ========================================================================
+
+    /**
+     * Renders dynamic category filter chips based on loaded data
+     */
+    function renderCategoryFilters() {
+      const container = el('categoryFilters');
+      if (!container) return;
+
+      // 1. Calculate Stats
+      const stats = { total: state.shortcuts.length };
+      state.shortcuts.forEach(item => {
+        const cat = item.mainCategory || 'Uncategorized';
+        stats[cat] = (stats[cat] || 0) + 1;
+      });
+
+      // 2. Identify Unique Categories (excluding empty/null)
+      const categories = Object.keys(stats)
+        .filter(k => k !== 'total' && k !== 'Uncategorized')
+        .sort();
+
+      // 3. Build HTML
+      let html = '<span class="filter-label">Category:</span>';
+
+      // "All" Chip
+      const allActive = state.filterMode === 'all' ? 'active' : '';
+      html += `
+        <div class="chip ${allActive}" data-filter="all" data-filter-type="category" 
+             style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+          🌐 All (${stats.total})
+        </div>`;
+
+      // "Favorites" Chip
+      const favCount = state.shortcuts.filter(s => s.favorite).length;
+      const favActive = state.filterMode === 'favorites' ? 'active' : '';
+      html += `
+        <div class="chip ${favActive}" data-filter="favorites" data-filter-type="category"
+             style="background: #fff8e1; color: #f57c00; border: 1px solid #ffe082;">
+          ⭐ Favorites (${favCount})
+        </div>`;
+
+      // Dynamic Category Chips
+      categories.forEach(cat => {
+        const count = stats[cat];
+        const isActive = state.mainCategoryFilter === cat ? 'active' : ''; // Note: filterMode is usually for 'all'/'favorites' vs specific filters
+        // Wait, typical logic puts specific category filters in specific state var or checks filterMode? 
+        // Logic in getFilteredShortcuts checks 'state.mainCategoryFilter'.
+
+        // If the click handler sets 'state.filterMode', we need to align. 
+        // The existing delegation sets 'state.filterMode = chip.dataset.filter'.
+        // BUT getFilteredShortcuts checks 'state.mainCategoryFilter' separately.
+        // We need to update the click handler or unify this. 
+        // For now, let's assume specific categories set mainCategoryFilter.
+
+        // Let's rely on the updated delegation logic below.
+        const activeClass = state.mainCategoryFilter === cat ? 'active' : '';
+        const colorStyle = getCategoryStyle(cat); // Helper for dynamic colors
+        const icon = getCategoryIcon(cat);
+
+        html += `
+          <div class="chip ${activeClass}" 
+               data-filter="${escapeHtml(cat)}" 
+               data-filter-type="category-dynamic"
+               style="${colorStyle}">
+            ${icon} ${escapeHtml(cat)} (${count})
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    function getCategoryStyle(category) {
+      // Dynamic color mapping based on category name
+      const lower = category.toLowerCase();
+
+      if (lower.includes('english')) return 'background: #e6f4ea; color: #137333; border: 1px solid #ceead6;';
+      if (lower.includes('spanish')) return 'background: #fce8e6; color: #d93025; border: 1px solid #fad2cf;';
+      if (lower.includes('business')) return 'background: #e6fffa; color: #047481; border: 1px solid #b2f5ea;';
+      if (lower.includes('casual')) return 'background: #fff5f5; color: #c53030; border: 1px solid #feb2b2;';
+      if (lower.includes('code')) return 'background: #ebf8ff; color: #2b6cb0; border: 1px solid #bee3f8;';
+      if (lower.includes('emoji')) return 'background: #fffff0; color: #d69e2e; border: 1px solid #fefcbf;';
+
+      // Default fallback
+      return 'background: #f3f4f6; color: #4b5563; border: 1px solid #e5e7eb;';
+    }
+
+    function getCategoryIcon(category) {
+      const lower = category.toLowerCase();
+      if (lower.includes('english')) return '🇺🇸';
+      if (lower.includes('spanish')) return '🇪🇸';
+      if (lower.includes('business')) return '💼';
+      if (lower.includes('code')) return '💻';
+      if (lower.includes('emoji')) return '🎨';
+      if (lower.includes('casual')) return '😎';
+      return '📁';
+    }
+
+    // ========================================================================
     // EVENT DELEGATION SYSTEM
-    // Handles all grid clicks without inline onclick handlers
     // ========================================================================
 
     /**
@@ -2034,6 +2133,7 @@
       // Set up event delegation (only needs to be called once)
       setupEventDelegation();
       setupFilterDelegation();  // Set up filter chip and search delegation
+      renderCategoryFilters();  // 🔥 Dynamic Category Generation
       updateFilterCount();      // Initialize filter count display
     }
 
@@ -2450,15 +2550,37 @@
       // Category filters (event delegation)
       const categoryFilters = el('categoryFilters');
       if (categoryFilters) {
+
         categoryFilters.addEventListener('click', (e) => {
+          // Handle standard chips (All/Favorites)
           const chip = e.target.closest('[data-filter-type="category"]');
           if (chip) {
             state.filterMode = chip.dataset.filter;
-            updateChipActiveState(categoryFilters, chip);
+            state.mainCategoryFilter = 'all'; // Reset specific category
+
+            // Visual Update
+            renderCategoryFilters();
+            // We re-render filters to update active state
+
+            render();
+            updateFilterCount();
+            return;
+          }
+
+          // Handle Dynamic Category Chips
+          const dynChip = e.target.closest('[data-filter-type="category-dynamic"]');
+          if (dynChip) {
+            state.mainCategoryFilter = dynChip.dataset.filter;
+            state.filterMode = 'category'; // custom mode
+
+            // Visual Update
+            renderCategoryFilters();
+
             render();
             updateFilterCount();
           }
         });
+
       }
 
       // Language filters (event delegation)
