@@ -12,6 +12,18 @@ Spreadsheet: Shortcuts
 ID: 17NaZQTbIm8LEiO2VoQoIn5HpqGEQKGAIUXN81SGnZJQ
 """
 
+# Configuration Constants
+SPREADSHEET_ID = "17NaZQTbIm8LEiO2VoQoIn5HpqGEQKGAIUXN81SGnZJQ"
+SHEET_NAME = "Shortcuts"
+
+# ML Hyperparameters
+TFIDF_MAX_FEATURES = 1000
+TFIDF_NGRAM_RANGE = (1, 2)
+TEST_SIZE = 0.2
+RANDOM_STATE = 42
+CV_FOLDS = 5
+MIN_TRAINING_SAMPLES = 5
+
 # %% [markdown]
 # # 🧠 ML Categorizer
 # Train a machine learning model on your categorized shortcuts!
@@ -99,33 +111,42 @@ print("✅ Authenticated!")
 # ## Step 3: Load Data 📥
 
 # %%
-SPREADSHEET_ID = "17NaZQTbIm8LEiO2VoQoIn5HpqGEQKGAIUXN81SGnZJQ"
-SHEET_NAME = "Shortcuts"
 OUTPUT_FOLDER = "/content" if IN_COLAB else str(Path.cwd())
 
-spreadsheet = gc.open_by_key(SPREADSHEET_ID)
-worksheet = spreadsheet.worksheet(SHEET_NAME)
-data = worksheet.get_all_records()
-df = pd.DataFrame(data)
+# Initialize dataframe
+df = None
+worksheet = None
 
-print(f"✅ Loaded {len(df)} shortcuts!")
-
-# Check for existing categories
-if 'MainCategory' in df.columns:
-    categorized = df['MainCategory'].notna() & (df['MainCategory'] != '')
-    print(f"📊 Categorized: {categorized.sum()} / {len(df)}")
-else:
-    print("⚠️ No MainCategory column - run TextExpanderCategorizer.py first!")
+try:
+    spreadsheet = gc.open_by_key(SPREADSHEET_ID)
+    worksheet = spreadsheet.worksheet(SHEET_NAME)
+    data = worksheet.get_all_records()
+    df = pd.DataFrame(data)
+    print(f"✅ Loaded {len(df)} shortcuts!")
+    
+    # Check for existing categories
+    if 'MainCategory' in df.columns:
+        categorized = df['MainCategory'].notna() & (df['MainCategory'] != '')
+        print(f"📊 Categorized: {categorized.sum()} / {len(df)}")
+    else:
+        print("⚠️ No MainCategory column - run TextExpanderCategorizer.py first!")
+except Exception as e:
+    print(f"❌ Error loading spreadsheet: {e}")
+    print("💡 Make sure you've shared the spreadsheet with your service account!")
 
 # %% [markdown]
 # ## Step 4: Prepare Training Data 📚
 
 # %%
-def prepare_training_data(min_samples=5):
+def prepare_training_data(min_samples=MIN_TRAINING_SAMPLES):
     """Prepare data for ML training! 📚"""
     print("\n" + "=" * 60)
     print("📚 PREPARING TRAINING DATA")
     print("=" * 60)
+    
+    if df is None:
+        print("❌ No data loaded! Check spreadsheet connection.")
+        return None, None, None
     
     if 'MainCategory' not in df.columns:
         print("❌ No MainCategory column!")
@@ -187,9 +208,9 @@ def train_model():
     print(f"📊 Training set: {len(X_train)}")
     print(f"📊 Test set: {len(X_test)}")
     
-    # Create pipeline
+    # Create pipeline with configurable hyperparameters
     model = Pipeline([
-        ('tfidf', TfidfVectorizer(max_features=1000, ngram_range=(1, 2))),
+        ('tfidf', TfidfVectorizer(max_features=TFIDF_MAX_FEATURES, ngram_range=TFIDF_NGRAM_RANGE)),
         ('clf', MultinomialNB())
     ])
     
@@ -205,7 +226,7 @@ def train_model():
     print(f"📈 Test Accuracy: {test_acc:.1%}")
     
     # Cross-validation
-    cv_scores = cross_val_score(model, X, y, cv=5)
+    cv_scores = cross_val_score(model, X, y, cv=CV_FOLDS)
     print(f"📊 Cross-val Score: {cv_scores.mean():.1%} (+/- {cv_scores.std()*2:.1%})")
     
     return model
@@ -255,7 +276,8 @@ def predict_uncategorized():
     print("\n📋 Sample Predictions:")
     print("-" * 60)
     for _, row in predictions_df.head(5).iterrows():
-        print(f"  '{row.get('Snippet Name', '')[:30]}' → {row['predicted_category']} ({row['confidence']:.0%})")
+        snippet_name = str(row.get('Snippet Name', '') or '')[:30]
+        print(f"  '{snippet_name}' → {row['predicted_category']} ({row['confidence']:.0%})")
     
     return predictions_df
 
@@ -277,7 +299,8 @@ def review_low_confidence(threshold=0.5):
     print("-" * 60)
     
     for _, row in low_conf.head(10).iterrows():
-        print(f"  '{row.get('Snippet Name', '')[:25]}' → {row['predicted_category']} ({row['confidence']:.0%})")
+        snippet_name = str(row.get('Snippet Name', '') or '')[:25]
+        print(f"  '{snippet_name}' → {row['predicted_category']} ({row['confidence']:.0%})")
 
 review_low_confidence()
 
