@@ -12,6 +12,10 @@ This project supports **Jules**, an AI-powered coding assistant CLI. Use it to c
     jules login
     ```
 
+> [!WARNING]
+> **Naming Collision**: Do **NOT** install `jules` from the public npm registry (e.g., `npm install jules`). That package is an unrelated JSON tool.
+> This project relies on the **Jules AI CLI** being installed globally or provided via a private registry.
+
 ## 🛠️ Common Commands
 
 | Script | Command | Description |
