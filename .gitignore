@@ -7,3 +7,11 @@ node_modules/
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# Secrets
+credentials.json
+.gemini/
+
+# Python Cache
+__pycache__/
+*.py[cod]
