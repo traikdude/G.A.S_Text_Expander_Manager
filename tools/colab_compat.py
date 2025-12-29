@@ -104,7 +104,7 @@ class ColabCompat:
             )
         print(f"✅ Packages ready: {packages_str}")
     
-    def ensure_packages(self):
+    def ensure_packages(self, additional_packages=None):
         """Ensure all required packages are installed! 📦"""
         required = [
             "gspread",
@@ -113,6 +113,9 @@ class ColabCompat:
             "google-auth",
             "google-auth-oauthlib"
         ]
+        
+        if additional_packages:
+            required.extend(additional_packages)
         
         # Check which packages need installation
         missing = []

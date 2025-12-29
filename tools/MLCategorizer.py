@@ -32,38 +32,26 @@ MIN_TRAINING_SAMPLES = 5
 # ## Step 1: Setup 🔍
 
 # %%
-import sys
-import os
-import subprocess
-import io
-
-# Fix Windows console encoding
-if sys.platform.startswith('win'):
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
-
-IN_COLAB = 'google.colab' in sys.modules
-print(f"🔍 Environment: {'🌐 Colab' if IN_COLAB else '💻 Local'}")
-
 # %%
-def ensure_packages():
-    required = ['gspread', 'pandas', 'scikit-learn', 'matplotlib', 'seaborn']
-    for pkg in required:
-        pkg_import = pkg.replace('-', '_') if pkg == 'scikit-learn' else pkg
-        if pkg == 'scikit-learn':
-            pkg_import = 'sklearn'
-        try:
-            __import__(pkg_import)
-        except ImportError:
-            print(f"📦 Installing {pkg}...")
-            if IN_COLAB:
-                from IPython import get_ipython
-                get_ipython().system(f'pip install {pkg} -q')
-            else:
-                subprocess.run([sys.executable, '-m', 'pip', 'install', pkg, '-q'], capture_output=True)
-    print("✅ Packages ready!")
+import sys
+from pathlib import Path
 
-ensure_packages()
+# Add current directory to path so we can import colab_compat if run from adjacent dir
+current_dir = Path(__file__).resolve().parent
+if str(current_dir) not in sys.path:
+    sys.path.insert(0, str(current_dir))
+
+try:
+    from colab_compat import ColabCompat
+except ImportError:
+    # Fallback if tools/ is not in path
+    sys.path.append("tools")
+    from tools.colab_compat import ColabCompat
+
+# Initialize Compatibility Layer
+compat = ColabCompat()
+compat.print_environment()
+compat.ensure_packages(["scikit-learn", "matplotlib", "seaborn"])
 
 # %%
 import gspread
@@ -88,57 +76,73 @@ print("✅ Libraries imported!")
 # ## Step 2: Authentication 🔐
 
 # %%
-if IN_COLAB:
-    from google.colab import auth
-    from google.auth import default
-    auth.authenticate_user()
-    creds, _ = default()
-    gc = gspread.authorize(creds)
-else:
-    creds_file = Path("credentials.json")
-    gspread_creds = Path.home() / ".config" / "gspread" / "credentials.json"
-    
-    if creds_file.exists():
-        from google.oauth2.service_account import Credentials
-        scopes = ['https://www.googleapis.com/auth/spreadsheets']
-        creds = Credentials.from_service_account_file(str(creds_file), scopes=scopes)
-        gc = gspread.authorize(creds)
-    elif gspread_creds.exists():
-        from google.oauth2.service_account import Credentials
-        scopes = ['https://www.googleapis.com/auth/spreadsheets']
-        creds = Credentials.from_service_account_file(str(gspread_creds), scopes=scopes)
-        gc = gspread.authorize(creds)
-    else:
-        gc = gspread.oauth()
-
-print("✅ Authenticated!")
+# %%
+MOCK_MODE = False
+try:
+    gc = compat.get_gspread_client()
+    print("✅ Authenticated successfully!")
+except Exception as e:
+    print(f"⚠️ Authentication failed: {e}")
+    print("🚀 Switching to MOCK MODE for testing/demo purposes.")
+    MOCK_MODE = True
+    gc = None
 
 # %% [markdown]
-# ## Step 3: Load Data 📥
+# ## Step 3: Load Data 📊
 
 # %%
-OUTPUT_FOLDER = "/content" if IN_COLAB else str(Path.cwd())
+OUTPUT_FOLDER = str(compat.base_path)
 
 # Initialize dataframe
 df = None
 worksheet = None
 
-try:
-    spreadsheet = gc.open_by_key(SPREADSHEET_ID)
-    worksheet = spreadsheet.worksheet(SHEET_NAME)
-    data = worksheet.get_all_records()
+if MOCK_MODE:
+    print("\n🚧 MOCK MODE: Generating dummy data for logic testing...")
+    # Create valid dummy dataframe matching expected structure
+    data = {
+        'Snippet Name': ['addr', 'mail', 'sig', 'meeting', 'date'],
+        'Content': ['123 Main St', 'example@test.com', 'Cheers,\nErik', 'Meeting link:', '2024-01-01'],
+        'Description': ['Home address', 'Personal email', 'Signature', 'Zoom link', 'Current date'],
+        'MainCategory': ['Contact', 'Contact', 'Communication', 'Communication', 'Dates & Time'],
+        'Subcategory': ['Address', 'Email', 'Signatures', 'Meetings', 'Date Formats']
+    }
     df = pd.DataFrame(data)
-    print(f"✅ Loaded {len(df)} shortcuts!")
+    print(f"📊 Mock Data Loaded: {len(df)} rows")
     
-    # Check for existing categories
-    if 'MainCategory' in df.columns:
-        categorized = df['MainCategory'].notna() & (df['MainCategory'] != '')
-        print(f"📊 Categorized: {categorized.sum()} / {len(df)}")
-    else:
-        print("⚠️ No MainCategory column - run TextExpanderCategorizer.py first!")
-except Exception as e:
-    print(f"❌ Error loading spreadsheet: {e}")
-    print("💡 Make sure you've shared the spreadsheet with your service account!")
+    # Simulate partial categorization for testing
+    categorized_count = len(df)
+    print(f"📊 Categorized: {categorized_count} / {len(df)}")
+
+else:
+    try:
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        worksheet = sh.worksheet(SHEET_NAME)
+        # Using get_all_records is safer for headers
+        df = pd.DataFrame(worksheet.get_all_records())
+        print(f"✅ Loaded {len(df)} shortcuts!")
+        
+        # Check for existing categories
+        if 'MainCategory' in df.columns:
+            # Handle empty strings or NaNs
+            categorized = df['MainCategory'].replace('', np.nan).notna()
+            print(f"📊 Categorized: {categorized.sum()} / {len(df)}")
+        else:
+            print("⚠️ 'MainCategory' column missing. Adding empty column for compatibility.")
+            df['MainCategory'] = ''
+            
+    except Exception as e:
+        print(f"❌ Error loading spreadsheet: {e}")
+        raise
+
+# Logic Hardening: Ensure 'MainCategory' exists (D13 Requirement)
+if df is not None:
+    if 'MainCategory' not in df.columns:
+        df['MainCategory'] = ''
+    # Fill NaNs with empty strings to prevent 'float' errors in text processing
+    df['MainCategory'] = df['MainCategory'].fillna('')
+
+print("✅ Data validation complete.")
 
 # %% [markdown]
 # ## Step 4: Prepare Training Data 📚

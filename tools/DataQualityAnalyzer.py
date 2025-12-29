@@ -20,35 +20,25 @@ ID: 17NaZQTbIm8LEiO2VoQoIn5HpqGEQKGAIUXN81SGnZJQ
 # ## Step 1: Setup 🔍
 
 # %%
-import sys
-import os
-import subprocess
-import io
-
-# Fix Windows console encoding
-if sys.platform.startswith('win'):
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
-
-IN_COLAB = 'google.colab' in sys.modules
-print(f"🔍 Environment: {'🌐 Colab' if IN_COLAB else '💻 Local'}")
-
 # %%
-def ensure_packages():
-    required = ['gspread', 'pandas', 'matplotlib', 'seaborn']
-    for pkg in required:
-        try:
-            __import__(pkg)
-        except ImportError:
-            print(f"📦 Installing {pkg}...")
-            if IN_COLAB:
-                from IPython import get_ipython
-                get_ipython().system(f'pip install {pkg} -q')
-            else:
-                subprocess.run([sys.executable, '-m', 'pip', 'install', pkg, '-q'], capture_output=True)
-    print("✅ Packages ready!")
+import sys
+from pathlib import Path
 
-ensure_packages()
+# Add current directory to path so we can import colab_compat if run from adjacent dir
+current_dir = Path(__file__).resolve().parent
+if str(current_dir) not in sys.path:
+    sys.path.insert(0, str(current_dir))
+
+try:
+    from colab_compat import ColabCompat
+except ImportError:
+    sys.path.append("tools")
+    from tools.colab_compat import ColabCompat
+
+# Initialize Compatibility Layer
+compat = ColabCompat()
+compat.print_environment()
+compat.ensure_packages(["matplotlib", "seaborn"])
 
 # %%
 import gspread
@@ -69,30 +59,16 @@ print("✅ Libraries imported!")
 # ## Step 2: Authentication 🔐
 
 # %%
-if IN_COLAB:
-    from google.colab import auth
-    from google.auth import default
-    auth.authenticate_user()
-    creds, _ = default()
-    gc = gspread.authorize(creds)
-else:
-    creds_file = Path("credentials.json")
-    gspread_creds = Path.home() / ".config" / "gspread" / "credentials.json"
-    
-    if creds_file.exists():
-        from google.oauth2.service_account import Credentials
-        scopes = ['https://www.googleapis.com/auth/spreadsheets']
-        creds = Credentials.from_service_account_file(str(creds_file), scopes=scopes)
-        gc = gspread.authorize(creds)
-    elif gspread_creds.exists():
-        from google.oauth2.service_account import Credentials
-        scopes = ['https://www.googleapis.com/auth/spreadsheets']
-        creds = Credentials.from_service_account_file(str(gspread_creds), scopes=scopes)
-        gc = gspread.authorize(creds)
-    else:
-        gc = gspread.oauth()
-
-print("✅ Authenticated!")
+# %%
+MOCK_MODE = False
+try:
+    gc = compat.get_gspread_client()
+    print("✅ Authenticated successfully!")
+except Exception as e:
+    print(f"⚠️ Authentication failed: {e}")
+    print("🚀 Switching to MOCK MODE for testing/demo purposes.")
+    MOCK_MODE = True
+    gc = None
 
 # %% [markdown]
 # ## Step 3: Load Data 📥
@@ -100,21 +76,35 @@ print("✅ Authenticated!")
 # %%
 SPREADSHEET_ID = "17NaZQTbIm8LEiO2VoQoIn5HpqGEQKGAIUXN81SGnZJQ"
 SHEET_NAME = "Shortcuts"
-OUTPUT_FOLDER = "/content" if IN_COLAB else str(Path.cwd())
+OUTPUT_FOLDER = str(compat.base_path)
 
 # Initialize dataframe
 df = None
 
-try:
-    spreadsheet = gc.open_by_key(SPREADSHEET_ID)
-    worksheet = spreadsheet.worksheet(SHEET_NAME)
-    data = worksheet.get_all_records()
+if MOCK_MODE:
+    print("\n🚧 MOCK MODE: Generating dummy data for logic testing...")
+    # Create valid dummy dataframe with some intentional quality issues for testing
+    data = {
+        'Snippet Name': ['addr', '', 'sig', 'meeting', 'date'],
+        'Content': ['123 Main St', 'example@test.com', '', 'Meeting link:', '2024-01-01'],
+        'Description': ['Home address', 'Personal email', 'Signature', '', 'Current date'],
+        'MainCategory': ['Contact', 'Contact', 'Communication', 'Communication', 'Dates & Time'],
+        'Language': ['en', 'en', '', 'en', 'es']
+    }
     df = pd.DataFrame(data)
-    print(f"✅ Loaded {len(df)} shortcuts!")
-    print(f"📋 Columns: {list(df.columns)}")
-except Exception as e:
-    print(f"❌ Error loading spreadsheet: {e}")
-    print("💡 Make sure you've shared the spreadsheet with your service account!")
+    print(f"📊 Mock Data Loaded: {len(df)} rows (with intentional empty fields)")
+
+else:
+    try:
+        spreadsheet = gc.open_by_key(SPREADSHEET_ID)
+        worksheet = spreadsheet.worksheet(SHEET_NAME)
+        data = worksheet.get_all_records()
+        df = pd.DataFrame(data)
+        print(f"✅ Loaded {len(df)} shortcuts!")
+        print(f"📋 Columns: {list(df.columns)}")
+    except Exception as e:
+        print(f"❌ Error loading spreadsheet: {e}")
+        raise
 
 # %% [markdown]
 # ## Step 4: Overview Statistics 📈
