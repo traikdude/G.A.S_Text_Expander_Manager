@@ -22,6 +22,12 @@ ID: 17NaZQTbIm8LEiO2VoQoIn5HpqGEQKGAIUXN81SGnZJQ
 import sys
 import os
 import subprocess
+import io
+
+# Fix Windows console encoding
+if sys.platform.startswith('win'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 # Detect environment
 IN_COLAB = 'google.colab' in sys.modules

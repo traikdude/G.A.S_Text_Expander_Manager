@@ -41,6 +41,12 @@ Run in Colab: Upload and run cells
 # Import compatibility layer
 import sys
 import os
+import io
+
+# Fix Windows console encoding
+if sys.platform.startswith('win'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 # Add tools directory to path for imports
 tools_dir = os.path.dirname(os.path.abspath(__file__)) if '__file__' in dir() else os.getcwd()
