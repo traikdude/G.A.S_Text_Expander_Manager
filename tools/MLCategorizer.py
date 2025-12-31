@@ -42,11 +42,11 @@ if str(current_dir) not in sys.path:
     sys.path.insert(0, str(current_dir))
 
 try:
-    from colab_compat import ColabCompat
+    from colab_compat import ColabCompat, safe_print
 except ImportError:
     # Fallback if tools/ is not in path
     sys.path.append("tools")
-    from tools.colab_compat import ColabCompat
+    from tools.colab_compat import ColabCompat, safe_print
 
 # Initialize Compatibility Layer
 compat = ColabCompat()

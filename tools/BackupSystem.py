@@ -55,7 +55,7 @@ if tools_dir not in sys.path:
 
 # Try to import our compatibility module
 try:
-    from colab_compat import ColabCompat, setup_environment
+    from colab_compat import ColabCompat, setup_environment, safe_print
 except ImportError:
     # If running standalone, define minimal compatibility
     print("⚠️ colab_compat.py not found - using standalone mode")

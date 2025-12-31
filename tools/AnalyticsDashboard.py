@@ -22,33 +22,26 @@ ID: 17NaZQTbIm8LEiO2VoQoIn5HpqGEQKGAIUXN81SGnZJQ
 # %%
 import sys
 import os
-import subprocess
-import io
+from pathlib import Path
 
-# Fix Windows console encoding
-if sys.platform.startswith('win'):
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+# Add tools directory to path for imports
+current_dir = Path(__file__).resolve().parent if '__file__' in dir() else Path.cwd()
+if str(current_dir) not in sys.path:
+    sys.path.insert(0, str(current_dir))
 
-IN_COLAB = 'google.colab' in sys.modules
-print(f"🔍 Environment: {'🌐 Colab' if IN_COLAB else '💻 Local'}")
+# Import shared compatibility module
+try:
+    from colab_compat import ColabCompat, safe_print
+except ImportError:
+    sys.path.append("tools")
+    from tools.colab_compat import ColabCompat, safe_print
 
-# %%
-def ensure_packages():
-    required = ['gspread', 'pandas', 'plotly', 'matplotlib', 'seaborn']
-    for pkg in required:
-        try:
-            __import__(pkg)
-        except ImportError:
-            print(f"📦 Installing {pkg}...")
-            if IN_COLAB:
-                from IPython import get_ipython
-                get_ipython().system(f'pip install {pkg} -q')
-            else:
-                subprocess.run([sys.executable, '-m', 'pip', 'install', pkg, '-q'], capture_output=True)
-    print("✅ Packages ready!")
+# Initialize Compatibility Layer
+compat = ColabCompat()
+compat.print_environment()
+compat.ensure_packages(["plotly", "matplotlib", "seaborn"])
 
-ensure_packages()
+IN_COLAB = compat.in_colab
 
 # %%
 import gspread
