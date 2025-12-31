@@ -15,15 +15,22 @@ Workflow:
 3. Apps Script imports results back to sheet
 
 Created: 2025-12-30
+Updated: 2025-12-31 - Integrated with colab_compat.py, fixed bare except
 Part of: G.A.S_Text_Expander_Manager
 """
 
 import os
 import sys
 import json
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 from pathlib import Path
+
+# Import shared compatibility module (handles both direct and package imports)
+try:
+    from colab_compat import ColabCompat, safe_print
+except ImportError:
+    from tools.colab_compat import ColabCompat, safe_print
 
 # ============================================================================
 # CONFIGURATION
@@ -31,90 +38,117 @@ from pathlib import Path
 
 # Default paths for Google Drive integration
 DRIVE_FOLDER_NAME = "TextExpanderBridge"
-COLAB_DRIVE_PATH = "/content/drive/MyDrive"
-LOCAL_DRIVE_PATH = os.path.expanduser("~/Google Drive/My Drive")  # Windows/Mac
 
 # ML Configuration
 CONFIDENCE_THRESHOLD = 0.15  # Minimum confidence to assign category
 TFIDF_MAX_FEATURES = 500
 TFIDF_NGRAM_RANGE = (1, 2)
+HIGH_CONFIDENCE_THRESHOLD = 0.6  # For statistics tracking
+LOW_CONFIDENCE_THRESHOLD = 0.3   # For statistics tracking
 
 # ============================================================================
-# ENVIRONMENT DETECTION
+# ENVIRONMENT DETECTION (Using shared colab_compat module)
 # ============================================================================
 
 def detect_environment() -> Dict[str, Any]:
-    """Detect runtime environment and set paths accordingly"""
+    """
+    Detect runtime environment using shared ColabCompat module.
+    
+    Returns:
+        Dict with environment info and file paths
+    """
+    compat = ColabCompat(backup_folder_name=DRIVE_FOLDER_NAME)
+    
     env = {
-        "is_colab": False,
+        "is_colab": compat.in_colab,
         "drive_mounted": False,
         "bridge_folder": None,
         "input_file": None,
-        "output_file": None
+        "output_file": None,
+        "compat": compat  # Store for later use
     }
     
-    # Check for Colab
-    try:
-        import google.colab
-        env["is_colab"] = True
-        print("🌐 Running in Google Colab")
-    except ImportError:
-        print("💻 Running in Local Python")
-    
-    # Determine Drive path
-    if env["is_colab"]:
-        drive_base = COLAB_DRIVE_PATH
-        if os.path.exists(drive_base):
-            env["drive_mounted"] = True
-        else:
-            print("⚠️ Google Drive not mounted. Run: drive.mount('/content/drive')")
+    # Print environment info
+    if compat.in_colab:
+        safe_print("🌐 Running in Google Colab")
+        drive_base = Path("/content/drive/MyDrive")
+        env["drive_mounted"] = drive_base.exists()
+        if not env["drive_mounted"]:
+            safe_print("⚠️ Google Drive not mounted. Run: drive.mount('/content/drive')")
     else:
+        safe_print("💻 Running in Local Python")
         # Try common local Drive paths
-        for path in [LOCAL_DRIVE_PATH, os.path.expanduser("~/Google Drive")]:
-            if os.path.exists(path):
+        possible_paths = [
+            Path.home() / "Google Drive" / "My Drive",
+            Path.home() / "Google Drive",
+            Path(".")  # Fallback to current directory
+        ]
+        drive_base = Path(".")
+        for path in possible_paths:
+            if path.exists():
                 drive_base = path
                 env["drive_mounted"] = True
                 break
-        else:
-            drive_base = "."
-            print("⚠️ Google Drive not found locally. Using current directory.")
+        
+        if not env["drive_mounted"]:
+            safe_print("⚠️ Google Drive not found locally. Using current directory.")
     
-    # Set bridge folder path
-    bridge_path = os.path.join(drive_base, DRIVE_FOLDER_NAME)
-    env["bridge_folder"] = bridge_path
-    env["input_file"] = os.path.join(bridge_path, "pending_tasks.json")
-    env["output_file"] = os.path.join(bridge_path, "results_latest.json")
+    # Set bridge folder paths
+    bridge_path = drive_base / DRIVE_FOLDER_NAME
+    env["bridge_folder"] = str(bridge_path)
+    env["input_file"] = str(bridge_path / "pending_tasks.json")
+    env["output_file"] = str(bridge_path / "results_latest.json")
     
     return env
 
 
 # ============================================================================
-# DEPENDENCY MANAGEMENT
+# DEPENDENCY MANAGEMENT (Using shared colab_compat module)
 # ============================================================================
 
-def ensure_dependencies():
-    """Install required packages if missing"""
+# ML dependencies - will be imported after ensure_dependencies() is called
+pd = None
+TfidfVectorizer = None
+cosine_similarity = None
+
+def ensure_dependencies(compat: Optional[ColabCompat] = None):
+    """
+    Install and import required packages if missing.
+    
+    Args:
+        compat: Optional ColabCompat instance for package installation
+    """
+    global pd, TfidfVectorizer, cosine_similarity
+    
     required = ["pandas", "scikit-learn"]
     missing = []
     
     for pkg in required:
+        pkg_import = pkg.replace("-", "_")
+        if pkg == "scikit-learn":
+            pkg_import = "sklearn"
         try:
-            __import__(pkg.replace("-", "_"))
+            __import__(pkg_import)
         except ImportError:
             missing.append(pkg)
     
     if missing:
-        print(f"📦 Installing missing packages: {missing}")
-        import subprocess
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q"] + missing)
-        print("✅ Dependencies installed!")
-
-ensure_dependencies()
-
-# Now import ML libraries
-import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+        safe_print(f"📦 Installing missing packages: {missing}")
+        if compat:
+            compat.install_packages(missing)
+        else:
+            import subprocess
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-q"] + missing)
+        safe_print("✅ Dependencies installed!")
+    
+    # Now import ML libraries
+    import pandas
+    from sklearn.feature_extraction.text import TfidfVectorizer as TfidfVec
+    from sklearn.metrics.pairwise import cosine_similarity as cos_sim
+    
+    pd = pandas
+    TfidfVectorizer = TfidfVec
+    cosine_similarity = cos_sim
 
 
 # ============================================================================
@@ -144,7 +178,7 @@ class TextExpanderCategorizer:
         )
         self.confidence_threshold = confidence_threshold
         
-        print(f"🎯 Categorizer initialized with {len(self.categories)} categories")
+        safe_print(f"🎯 Categorizer initialized with {len(self.categories)} categories")
     
     def categorize(self, text: str, description: str = "") -> Dict[str, Any]:
         """
@@ -214,7 +248,7 @@ class TextExpanderCategorizer:
             }
             
         except Exception as e:
-            print(f"⚠️ Error categorizing '{text[:30]}...': {e}")
+            safe_print(f"⚠️ Error categorizing '{text[:30]}...': {e}")
             return {
                 "category": "❌ Error",
                 "confidence": 0.0,
@@ -246,13 +280,13 @@ def process_batch(input_path: str, output_path: str) -> Dict[str, Any]:
         "errors": 0
     }
     
-    print(f"\n{'='*60}")
-    print("🌉 DRIVE CATEGORIZER BRIDGE")
-    print(f"{'='*60}")
+    safe_print(f"\n{'='*60}")
+    safe_print("🌉 DRIVE CATEGORIZER BRIDGE")
+    safe_print(f"{'='*60}")
     
     try:
         # 1️⃣ Read input file
-        print(f"\n📖 Reading: {input_path}")
+        safe_print(f"\n📖 Reading: {input_path}")
         
         if not os.path.exists(input_path):
             raise FileNotFoundError(f"Input file not found: {input_path}")
@@ -266,9 +300,9 @@ def process_batch(input_path: str, output_path: str) -> Dict[str, Any]:
         if missing:
             raise CategorizationError(f"Missing required keys: {missing}")
         
-        print(f"📋 Spreadsheet: {data.get('spreadsheetName', 'Unknown')}")
-        print(f"🎯 Categories: {len(data['availableCategories'])}")
-        print(f"📝 Tasks: {len(data['tasks'])}")
+        safe_print(f"📋 Spreadsheet: {data.get('spreadsheetName', 'Unknown')}")
+        safe_print(f"🎯 Categories: {len(data['availableCategories'])}")
+        safe_print(f"📝 Tasks: {len(data['tasks'])}")
         
         # 2️⃣ Initialize categorizer
         categorizer = TextExpanderCategorizer(data['availableCategories'])
@@ -277,12 +311,12 @@ def process_batch(input_path: str, output_path: str) -> Dict[str, Any]:
         results = []
         total = len(data['tasks'])
         
-        print(f"\n🔄 Processing {total} items...")
+        safe_print(f"\n🔄 Processing {total} items...")
         
         for idx, task in enumerate(data['tasks'], 1):
             # Progress indicator
             if idx % 10 == 0 or idx == total:
-                print(f"   [{idx}/{total}] Processing...")
+                safe_print(f"   [{idx}/{total}] Processing...")
             
             try:
                 result = categorizer.categorize(
@@ -291,24 +325,24 @@ def process_batch(input_path: str, output_path: str) -> Dict[str, Any]:
                 )
                 
                 results.append({
-                    "rowId": task['rowId'],
+                    "rowId": task.get('rowId', idx),  # Use idx as fallback if rowId missing
                     "originalText": str(task.get('text', ''))[:100],
                     "suggestedCategory": result['category'],
                     "confidence": round(result['confidence'], 4),
                     "alternatives": result['alternatives'][:2]  # Keep top 2 alternatives
                 })
                 
-                # Track confidence stats
-                if result['confidence'] >= 0.6:
+                # Track confidence stats using configurable thresholds
+                if result['confidence'] >= HIGH_CONFIDENCE_THRESHOLD:
                     stats["high_confidence"] += 1
-                elif result['confidence'] < 0.3:
+                elif result['confidence'] < LOW_CONFIDENCE_THRESHOLD:
                     stats["low_confidence"] += 1
                     
             except Exception as e:
-                print(f"⚠️ Error on row {task.get('rowId', '?')}: {e}")
+                safe_print(f"⚠️ Error on row {task.get('rowId', '?')}: {e}")
                 stats["errors"] += 1
                 results.append({
-                    "rowId": task.get('rowId', 0),
+                    "rowId": task.get('rowId', idx),  # Use idx as fallback
                     "originalText": str(task.get('text', ''))[:50],
                     "suggestedCategory": "❌ Processing Error",
                     "confidence": 0.0,
@@ -342,23 +376,23 @@ def process_batch(input_path: str, output_path: str) -> Dict[str, Any]:
         elapsed = (datetime.now() - start_time).total_seconds()
         avg_confidence = sum(r['confidence'] for r in results) / len(results) if results else 0
         
-        print(f"\n{'='*60}")
-        print("✅ PROCESSING COMPLETE!")
-        print(f"{'='*60}")
-        print(f"📊 Total processed: {stats['total_processed']}")
-        print(f"✅ High confidence (≥60%): {stats['high_confidence']}")
-        print(f"⚠️ Low confidence (<30%): {stats['low_confidence']}")
-        print(f"❌ Errors: {stats['errors']}")
-        print(f"📈 Average confidence: {avg_confidence:.1%}")
-        print(f"⏱️ Time: {elapsed:.2f}s")
-        print(f"💾 Output: {output_path}")
-        print(f"\n🔙 Return to Google Sheet and click '📥 Import Results'")
+        safe_print(f"\n{'='*60}")
+        safe_print("✅ PROCESSING COMPLETE!")
+        safe_print(f"{'='*60}")
+        safe_print(f"📊 Total processed: {stats['total_processed']}")
+        safe_print(f"✅ High confidence (≥60%): {stats['high_confidence']}")
+        safe_print(f"⚠️ Low confidence (<30%): {stats['low_confidence']}")
+        safe_print(f"❌ Errors: {stats['errors']}")
+        safe_print(f"📈 Average confidence: {avg_confidence:.1%}")
+        safe_print(f"⏱️ Time: {elapsed:.2f}s")
+        safe_print(f"💾 Output: {output_path}")
+        safe_print(f"\n🔙 Return to Google Sheet and click '📥 Import Results'")
         
         return stats
         
     except Exception as e:
         error_msg = f"❌ Fatal error: {e}"
-        print(error_msg)
+        safe_print(error_msg)
         
         # Write error to output file
         try:
@@ -367,8 +401,8 @@ def process_batch(input_path: str, output_path: str) -> Dict[str, Any]:
                     "error": str(e),
                     "timestamp": datetime.now().isoformat()
                 }, f, indent=2)
-        except:
-            pass
+        except (IOError, OSError) as write_error:
+            safe_print(f"⚠️ Could not write error file: {write_error}")
         
         stats["success"] = False
         return stats
@@ -391,20 +425,30 @@ def mount_drive():
 
 
 def run_categorization():
-    """Main entry point - detect environment and run"""
+    """
+    Main entry point - detect environment and run categorization.
+    
+    Returns:
+        Dict with processing stats, or None if cannot proceed
+    """
+    # Detect environment first
     env = detect_environment()
     
-    print(f"\n📁 Bridge folder: {env['bridge_folder']}")
-    print(f"📥 Input: {env['input_file']}")
-    print(f"📤 Output: {env['output_file']}")
+    # Install dependencies using the compat instance (lazy loading)
+    compat = env.get("compat")
+    ensure_dependencies(compat)
+    
+    safe_print(f"\n📁 Bridge folder: {env['bridge_folder']}")
+    safe_print(f"📥 Input: {env['input_file']}")
+    safe_print(f"📤 Output: {env['output_file']}")
     
     if not env["drive_mounted"]:
-        print("\n⚠️ Drive not accessible. Please mount/sync first.")
+        safe_print("\n⚠️ Drive not accessible. Please mount/sync first.")
         return None
     
     if not os.path.exists(env["input_file"]):
-        print(f"\n⏳ No pending tasks found.")
-        print("   Run '🚀 Trigger Categorization' from Google Sheet first.")
+        safe_print(f"\n⏳ No pending tasks found.")
+        safe_print("   Run '🚀 Trigger Categorization' from Google Sheet first.")
         return None
     
     return process_batch(env["input_file"], env["output_file"])
