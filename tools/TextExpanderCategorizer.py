@@ -21,36 +21,26 @@ ID: 17NaZQTbIm8LEiO2VoQoIn5HpqGEQKGAIUXN81SGnZJQ
 # %%
 import sys
 import os
-import subprocess
-import io
+from pathlib import Path
 
-# Fix Windows console encoding
-if sys.platform.startswith('win'):
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+# Add tools directory to path for imports
+current_dir = Path(__file__).resolve().parent if '__file__' in dir() else Path.cwd()
+if str(current_dir) not in sys.path:
+    sys.path.insert(0, str(current_dir))
 
-# Detect environment
-IN_COLAB = 'google.colab' in sys.modules
-ENV_NAME = "🌐 Google Colab" if IN_COLAB else "💻 Local Python"
-print(f"🔍 Environment: {ENV_NAME}")
+# Import shared compatibility module
+try:
+    from colab_compat import ColabCompat, safe_print
+except ImportError:
+    sys.path.append("tools")
+    from tools.colab_compat import ColabCompat, safe_print
 
-# %%
-# Install packages
-def ensure_packages():
-    required = ['gspread', 'pandas', 'numpy', 'regex']
-    for pkg in required:
-        try:
-            __import__(pkg)
-        except ImportError:
-            print(f"📦 Installing {pkg}...")
-            if IN_COLAB:
-                from IPython import get_ipython
-                get_ipython().system(f'pip install {pkg} -q')
-            else:
-                subprocess.run([sys.executable, '-m', 'pip', 'install', pkg, '-q'], capture_output=True)
-    print("✅ Packages ready!")
+# Initialize Compatibility Layer
+compat = ColabCompat()
+compat.print_environment()
+compat.ensure_packages(["numpy", "regex"])
 
-ensure_packages()
+IN_COLAB = compat.in_colab
 
 # %%
 import gspread
@@ -63,7 +53,7 @@ from pathlib import Path
 import warnings
 warnings.filterwarnings('ignore')
 
-print("✅ Libraries imported!")
+safe_print("✅ Libraries imported!")
 
 # %% [markdown]
 # ## Step 2: Authentication 🔐
@@ -72,12 +62,12 @@ print("✅ Libraries imported!")
 if IN_COLAB:
     from google.colab import auth
     from google.auth import default
-    print("🔐 Authenticating (Colab)...")
+    safe_print("🔐 Authenticating (Colab)...")
     auth.authenticate_user()
     creds, _ = default()
     gc = gspread.authorize(creds)
 else:
-    print("🔐 Authenticating (Local)...")
+    safe_print("🔐 Authenticating (Local)...")
     creds_file = Path("credentials.json")
     gspread_creds = Path.home() / ".config" / "gspread" / "credentials.json"
     
@@ -94,7 +84,7 @@ else:
     else:
         gc = gspread.oauth()
 
-print("✅ Authentication successful!")
+safe_print("✅ Authentication successful!")
 
 # %% [markdown]
 # ## Step 3: Connect to Spreadsheet 📊
@@ -107,16 +97,16 @@ OUTPUT_FOLDER = "/content" if IN_COLAB else str(Path.cwd())
 try:
     spreadsheet = gc.open_by_key(SPREADSHEET_ID)
     worksheet = spreadsheet.worksheet(SHEET_NAME)
-    print(f"✅ Connected to '{spreadsheet.title}' - Sheet: '{SHEET_NAME}'")
+    safe_print(f"✅ Connected to '{spreadsheet.title}' - Sheet: '{SHEET_NAME}'")
 except Exception as e:
-    print(f"❌ Error: {e}")
+    safe_print(f"❌ Error: {e}")
     raise
 
 # %%
 data = worksheet.get_all_records()
 df = pd.DataFrame(data)
-print(f"✅ Loaded {len(df)} shortcuts")
-print(f"   Columns: {list(df.columns)}")
+safe_print(f"✅ Loaded {len(df)} shortcuts")
+safe_print(f"   Columns: {list(df.columns)}")
 
 # %% [markdown]
 # ## Step 4: Category Definitions 🏷️
@@ -135,7 +125,7 @@ MAIN_CATEGORIES = {
     "🏷️ Status & Labels": ["Priority Markers", "Status Icons", "Checkboxes", "Tags", "Badges"]
 }
 
-print(f"✅ Defined {len(MAIN_CATEGORIES)} main categories")
+safe_print(f"✅ Defined {len(MAIN_CATEGORIES)} main categories")
 
 # %% [markdown]
 # ## Step 5: Pattern Detection 🔍
@@ -181,7 +171,7 @@ FONT_STYLE_PATTERNS = {
     "Monospace": r'[\U0001D670-\U0001D6A3]',
 }
 
-print("✅ Patterns loaded!")
+safe_print("✅ Patterns loaded!")
 
 # %%
 def detect_category(content, description=""):
@@ -223,10 +213,10 @@ def detect_category(content, description=""):
     return ("🏷️ Status & Labels", "Tags", 0.3)
 
 # Test
-print("Testing detection:")
+safe_print("Testing detection:")
 for test in [("😊", ""), ("January", ""), ("→", ""), ("Hello", "greeting")]:
     cat, sub, conf = detect_category(*test)
-    print(f"  '{test[0]}' → {sub} ({conf:.0%})")
+    safe_print(f"  '{test[0]}' → {sub} ({conf:.0%})")
 
 # %% [markdown]
 # ## Step 6: Analyze All Shortcuts 📊
@@ -253,13 +243,13 @@ def analyze_shortcuts():
     return pd.DataFrame(results)
 
 results_df = analyze_shortcuts()
-print(f"✅ Analyzed {len(results_df)} shortcuts!")
-print(f"⚠️ {len(results_df[results_df['confidence'] < 0.5])} need review")
+safe_print(f"✅ Analyzed {len(results_df)} shortcuts!")
+safe_print(f"⚠️ {len(results_df[results_df['confidence'] < 0.5])} need review")
 
 # %%
 # Show distribution
-print("\n📊 Category Distribution:")
-print(results_df['main_category'].value_counts().to_string())
+safe_print("\n📊 Category Distribution:")
+safe_print(results_df['main_category'].value_counts().to_string())
 
 # %% [markdown]
 # ## Step 7: Export Results 📤
@@ -269,7 +259,7 @@ def export_results():
     """Export categorization results! 📤"""
     output_file = os.path.join(OUTPUT_FOLDER, "categorization_results.csv")
     results_df.to_csv(output_file, index=False)
-    print(f"✅ Exported to: {output_file}")
+    safe_print(f"✅ Exported to: {output_file}")
     
     if IN_COLAB:
         from google.colab import files
@@ -284,7 +274,7 @@ export_results()
 def write_categories_to_sheet(confirm=False):
     """Write categories back to spreadsheet! ✏️"""
     if not confirm:
-        print("💡 Run: write_categories_to_sheet(confirm=True)")
+        safe_print("💡 Run: write_categories_to_sheet(confirm=True)")
         return
     
     headers = worksheet.row_values(1)
@@ -308,18 +298,18 @@ def write_categories_to_sheet(confirm=False):
         
         cells = [[row['subcategory']] for _, row in batch.iterrows()]
         worksheet.update(f"{gspread.utils.rowcol_to_a1(start_row, sub_col)}:{gspread.utils.rowcol_to_a1(end_row, sub_col)}", cells)
-        print(f"  ✓ Rows {start_row}-{end_row}")
+        safe_print(f"  ✓ Rows {start_row}-{end_row}")
     
-    print(f"✅ Written {len(results_df)} categories!")
+    safe_print(f"✅ Written {len(results_df)} categories!")
 
-print("💡 To write to sheet: write_categories_to_sheet(confirm=True)")
+safe_print("💡 To write to sheet: write_categories_to_sheet(confirm=True)")
 
 # %% [markdown]
 # ## 🚀 Quick Actions Menu
 
 # %%
 def show_menu():
-    print("""
+    safe_print("""
 ╔═══════════════════════════════════════════════════════╗
 ║         🎯 TEXT EXPANDER CATEGORIZER                  ║
 ╠═══════════════════════════════════════════════════════╣
@@ -336,4 +326,4 @@ show_menu()
 
 # %%
 if __name__ == "__main__":
-    print("\n💡 Categorizer ready! Use the functions above.")
+    safe_print("\n💡 Categorizer ready! Use the functions above.")

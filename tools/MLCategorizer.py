@@ -70,7 +70,7 @@ from sklearn.pipeline import Pipeline
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-print("✅ Libraries imported!")
+safe_print("✅ Libraries imported!")
 
 # %% [markdown]
 # ## Step 2: Authentication 🔐
@@ -80,10 +80,10 @@ print("✅ Libraries imported!")
 MOCK_MODE = False
 try:
     gc = compat.get_gspread_client()
-    print("✅ Authenticated successfully!")
+    safe_print("✅ Authenticated successfully!")
 except Exception as e:
-    print(f"⚠️ Authentication failed: {e}")
-    print("🚀 Switching to MOCK MODE for testing/demo purposes.")
+    safe_print(f"⚠️ Authentication failed: {e}")
+    safe_print("🚀 Switching to MOCK MODE for testing/demo purposes.")
     MOCK_MODE = True
     gc = None
 
@@ -98,7 +98,7 @@ df = None
 worksheet = None
 
 if MOCK_MODE:
-    print("\n🚧 MOCK MODE: Generating dummy data for logic testing...")
+    safe_print("\n🚧 MOCK MODE: Generating dummy data for logic testing...")
     # Create valid dummy dataframe matching expected structure
     data = {
         'Snippet Name': ['addr', 'mail', 'sig', 'meeting', 'date'],
@@ -108,11 +108,11 @@ if MOCK_MODE:
         'Subcategory': ['Address', 'Email', 'Signatures', 'Meetings', 'Date Formats']
     }
     df = pd.DataFrame(data)
-    print(f"📊 Mock Data Loaded: {len(df)} rows")
+    safe_print(f"📊 Mock Data Loaded: {len(df)} rows")
     
     # Simulate partial categorization for testing
     categorized_count = len(df)
-    print(f"📊 Categorized: {categorized_count} / {len(df)}")
+    safe_print(f"📊 Categorized: {categorized_count} / {len(df)}")
 
 else:
     try:
@@ -120,19 +120,19 @@ else:
         worksheet = sh.worksheet(SHEET_NAME)
         # Using get_all_records is safer for headers
         df = pd.DataFrame(worksheet.get_all_records())
-        print(f"✅ Loaded {len(df)} shortcuts!")
+        safe_print(f"✅ Loaded {len(df)} shortcuts!")
         
         # Check for existing categories
         if 'MainCategory' in df.columns:
             # Handle empty strings or NaNs
             categorized = df['MainCategory'].replace('', np.nan).notna()
-            print(f"📊 Categorized: {categorized.sum()} / {len(df)}")
+            safe_print(f"📊 Categorized: {categorized.sum()} / {len(df)}")
         else:
-            print("⚠️ 'MainCategory' column missing. Adding empty column for compatibility.")
+            safe_print("⚠️ 'MainCategory' column missing. Adding empty column for compatibility.")
             df['MainCategory'] = ''
             
     except Exception as e:
-        print(f"❌ Error loading spreadsheet: {e}")
+        safe_print(f"❌ Error loading spreadsheet: {e}")
         raise
 
 # Logic Hardening: Ensure 'MainCategory' exists (D13 Requirement)
@@ -142,7 +142,7 @@ if df is not None:
     # Fill NaNs with empty strings to prevent 'float' errors in text processing
     df['MainCategory'] = df['MainCategory'].fillna('')
 
-print("✅ Data validation complete.")
+safe_print("✅ Data validation complete.")
 
 # %% [markdown]
 # ## Step 4: Prepare Training Data 📚
@@ -150,16 +150,16 @@ print("✅ Data validation complete.")
 # %%
 def prepare_training_data(min_samples=MIN_TRAINING_SAMPLES):
     """Prepare data for ML training! 📚"""
-    print("\n" + "=" * 60)
-    print("📚 PREPARING TRAINING DATA")
-    print("=" * 60)
+    safe_print("\n" + "=" * 60)
+    safe_print("📚 PREPARING TRAINING DATA")
+    safe_print("=" * 60)
     
     if df is None:
-        print("❌ No data loaded! Check spreadsheet connection.")
+        safe_print("❌ No data loaded! Check spreadsheet connection.")
         return None, None, None
     
     if 'MainCategory' not in df.columns:
-        print("❌ No MainCategory column!")
+        safe_print("❌ No MainCategory column!")
         return None, None, None
     
     # Combine text features
@@ -171,7 +171,7 @@ def prepare_training_data(min_samples=MIN_TRAINING_SAMPLES):
     # Filter to categorized rows
     df_cat = df[df['MainCategory'].notna() & (df['MainCategory'] != '')].copy()
     
-    print(f"📊 Categorized rows: {len(df_cat)}")
+    safe_print(f"📊 Categorized rows: {len(df_cat)}")
     
     # Filter categories with enough samples
     cat_counts = df_cat['MainCategory'].value_counts()
@@ -180,9 +180,9 @@ def prepare_training_data(min_samples=MIN_TRAINING_SAMPLES):
     df_train = df_cat[df_cat['MainCategory'].isin(valid_cats)]
     df_predict = df[~df.index.isin(df_train.index) | (df['MainCategory'] == '')]
     
-    print(f"✅ Training samples: {len(df_train)}")
-    print(f"🎯 To predict: {len(df_predict)}")
-    print(f"📋 Valid categories: {len(valid_cats)}")
+    safe_print(f"✅ Training samples: {len(df_train)}")
+    safe_print(f"🎯 To predict: {len(df_predict)}")
+    safe_print(f"📋 Valid categories: {len(valid_cats)}")
     
     return df, df_train, df_predict
 
@@ -199,12 +199,12 @@ def train_model():
     """Train the ML categorizer! 🧠"""
     global model, valid_categories
     
-    print("\n" + "=" * 60)
-    print("🧠 TRAINING ML MODEL")
-    print("=" * 60)
+    safe_print("\n" + "=" * 60)
+    safe_print("🧠 TRAINING ML MODEL")
+    safe_print("=" * 60)
     
     if df_train is None or len(df_train) < 10:
-        print("❌ Not enough training data!")
+        safe_print("❌ Not enough training data!")
         return None
     
     X = df_train['combined_text'].astype(str)
@@ -215,8 +215,8 @@ def train_model():
     # Split data
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     
-    print(f"📊 Training set: {len(X_train)}")
-    print(f"📊 Test set: {len(X_test)}")
+    safe_print(f"📊 Training set: {len(X_train)}")
+    safe_print(f"📊 Test set: {len(X_test)}")
     
     # Create pipeline with configurable hyperparameters
     model = Pipeline([
@@ -225,19 +225,19 @@ def train_model():
     ])
     
     # Train
-    print("\n⏳ Training...")
+    safe_print("\n⏳ Training...")
     model.fit(X_train, y_train)
     
     # Evaluate
     train_acc = model.score(X_train, y_train)
     test_acc = model.score(X_test, y_test)
     
-    print(f"\n📈 Training Accuracy: {train_acc:.1%}")
-    print(f"📈 Test Accuracy: {test_acc:.1%}")
+    safe_print(f"\n📈 Training Accuracy: {train_acc:.1%}")
+    safe_print(f"📈 Test Accuracy: {test_acc:.1%}")
     
     # Cross-validation
     cv_scores = cross_val_score(model, X, y, cv=CV_FOLDS)
-    print(f"📊 Cross-val Score: {cv_scores.mean():.1%} (+/- {cv_scores.std()*2:.1%})")
+    safe_print(f"📊 Cross-val Score: {cv_scores.mean():.1%} (+/- {cv_scores.std()*2:.1%})")
     
     return model
 
@@ -253,16 +253,16 @@ def predict_uncategorized():
     """Predict categories for uncategorized items! 🎯"""
     global predictions_df
     
-    print("\n" + "=" * 60)
-    print("🎯 PREDICTING CATEGORIES")
-    print("=" * 60)
+    safe_print("\n" + "=" * 60)
+    safe_print("🎯 PREDICTING CATEGORIES")
+    safe_print("=" * 60)
     
     if model is None:
-        print("❌ Train model first!")
+        safe_print("❌ Train model first!")
         return None
     
     if df_predict is None or len(df_predict) == 0:
-        print("✅ All items already categorized!")
+        safe_print("✅ All items already categorized!")
         return None
     
     X_pred = df_predict['combined_text'].astype(str)
@@ -279,15 +279,15 @@ def predict_uncategorized():
     high_conf = (probabilities >= 0.7).sum()
     low_conf = (probabilities < 0.5).sum()
     
-    print(f"\n📊 Predictions made: {len(predictions_df)}")
-    print(f"✅ High confidence (≥70%): {high_conf}")
-    print(f"⚠️ Low confidence (<50%): {low_conf}")
+    safe_print(f"\n📊 Predictions made: {len(predictions_df)}")
+    safe_print(f"✅ High confidence (≥70%): {high_conf}")
+    safe_print(f"⚠️ Low confidence (<50%): {low_conf}")
     
-    print("\n📋 Sample Predictions:")
-    print("-" * 60)
+    safe_print("\n📋 Sample Predictions:")
+    safe_print("-" * 60)
     for _, row in predictions_df.head(5).iterrows():
         snippet_name = str(row.get('Snippet Name', '') or '')[:30]
-        print(f"  '{snippet_name}' → {row['predicted_category']} ({row['confidence']:.0%})")
+        safe_print(f"  '{snippet_name}' → {row['predicted_category']} ({row['confidence']:.0%})")
     
     return predictions_df
 
@@ -300,17 +300,17 @@ predictions_df = predict_uncategorized()
 def review_low_confidence(threshold=0.5):
     """Review low confidence predictions! ⚠️"""
     if predictions_df is None:
-        print("❌ No predictions yet!")
+        safe_print("❌ No predictions yet!")
         return
     
     low_conf = predictions_df[predictions_df['confidence'] < threshold]
     
-    print(f"\n⚠️ {len(low_conf)} items need manual review:")
-    print("-" * 60)
+    safe_print(f"\n⚠️ {len(low_conf)} items need manual review:")
+    safe_print("-" * 60)
     
     for _, row in low_conf.head(10).iterrows():
         snippet_name = str(row.get('Snippet Name', '') or '')[:25]
-        print(f"  '{snippet_name}' → {row['predicted_category']} ({row['confidence']:.0%})")
+        safe_print(f"  '{snippet_name}' → {row['predicted_category']} ({row['confidence']:.0%})")
 
 review_low_confidence()
 
@@ -321,7 +321,7 @@ review_low_confidence()
 def export_predictions():
     """Export predictions to CSV! 📤"""
     if predictions_df is None:
-        print("❌ No predictions to export!")
+        safe_print("❌ No predictions to export!")
         return
     
     output_file = os.path.join(OUTPUT_FOLDER, "ml_predictions.csv")
@@ -330,7 +330,7 @@ def export_predictions():
     available_cols = [c for c in export_cols if c in predictions_df.columns]
     
     predictions_df[available_cols].to_csv(output_file, index=False)
-    print(f"✅ Exported to: {output_file}")
+    safe_print(f"✅ Exported to: {output_file}")
     
     if IN_COLAB:
         from google.colab import files
@@ -343,7 +343,7 @@ export_predictions()
 
 # %%
 def show_menu():
-    print("""
+    safe_print("""
 ╔═══════════════════════════════════════════════════════╗
 ║         🧠 ML CATEGORIZER                             ║
 ╠═══════════════════════════════════════════════════════╣
@@ -359,4 +359,4 @@ show_menu()
 
 # %%
 if __name__ == "__main__":
-    print("\n🎉 ML Categorizer ready!")
+    safe_print("\n🎉 ML Categorizer ready!")

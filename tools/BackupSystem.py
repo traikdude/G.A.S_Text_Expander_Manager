@@ -58,7 +58,7 @@ try:
     from colab_compat import ColabCompat, setup_environment, safe_print
 except ImportError:
     # If running standalone, define minimal compatibility
-    print("⚠️ colab_compat.py not found - using standalone mode")
+    safe_print("⚠️ colab_compat.py not found - using standalone mode")
     
     class ColabCompat:
         def __init__(self, backup_folder="TextExpanderBackups"):
@@ -67,7 +67,7 @@ except ImportError:
             
         def print_environment(self):
             env = "🌐 Google Colab" if self.in_colab else "💻 Local Python"
-            print(f"🔍 Environment: {env}")
+            safe_print(f"🔍 Environment: {env}")
             
         def ensure_backup_folder(self):
             os.makedirs(self.backup_path, exist_ok=True)
@@ -89,14 +89,14 @@ def ensure_packages():
         try:
             __import__(pkg.replace('-', '_'))
         except ImportError:
-            print(f"📦 Installing {pkg}...")
+            safe_print(f"📦 Installing {pkg}...")
             if compat.in_colab:
                 from IPython import get_ipython
                 get_ipython().system(f'pip install {pkg} -q')
             else:
                 subprocess.run([sys.executable, '-m', 'pip', 'install', pkg, '-q'], 
                              capture_output=True)
-    print("✅ All packages ready!")
+    safe_print("✅ All packages ready!")
 
 ensure_packages()
 
@@ -116,7 +116,7 @@ try:
 except ImportError:
     set_with_dataframe = None
 
-print("✅ Libraries imported! Ready to protect your data! 🛡️")
+safe_print("✅ Libraries imported! Ready to protect your data! 🛡️")
 
 # %% [markdown]
 # ## Step 2: Authentication 🔐
@@ -128,19 +128,19 @@ if compat.in_colab:
     from google.colab import auth, drive
     from google.auth import default
     
-    print("🔐 Authenticating with Google (Colab)...")
+    safe_print("🔐 Authenticating with Google (Colab)...")
     auth.authenticate_user()
     creds, _ = default()
     gc = gspread.authorize(creds)
     
     # Mount Google Drive for persistent storage
-    print("💾 Mounting Google Drive...")
+    safe_print("💾 Mounting Google Drive...")
     drive.mount('/content/drive')
     BACKUP_FOLDER = "/content/drive/MyDrive/TextExpanderBackups"
     
 else:
     # Local authentication
-    print("🔐 Authenticating with Google (Local)...")
+    safe_print("🔐 Authenticating with Google (Local)...")
     
     # Try service account first
     creds_file = Path("credentials.json")
@@ -154,7 +154,7 @@ else:
         ]
         creds = Credentials.from_service_account_file(str(creds_file), scopes=scopes)
         gc = gspread.authorize(creds)
-        print(f"✅ Authenticated via credentials.json")
+        safe_print(f"✅ Authenticated via credentials.json")
     elif gspread_creds.exists():
         from google.oauth2.service_account import Credentials
         scopes = [
@@ -163,20 +163,20 @@ else:
         ]
         creds = Credentials.from_service_account_file(str(gspread_creds), scopes=scopes)
         gc = gspread.authorize(creds)
-        print(f"✅ Authenticated via gspread config")
+        safe_print(f"✅ Authenticated via gspread config")
     else:
         # Fall back to OAuth
-        print("💡 No service account found, using OAuth...")
+        safe_print("💡 No service account found, using OAuth...")
         gc = gspread.oauth()
-        print("✅ Authenticated via OAuth!")
+        safe_print("✅ Authenticated via OAuth!")
     
     BACKUP_FOLDER = str(Path.home() / "TextExpanderBackups")
 
 # Ensure backup folder exists
 os.makedirs(BACKUP_FOLDER, exist_ok=True)
-print(f"📁 Backup folder: {BACKUP_FOLDER}")
+safe_print(f"📁 Backup folder: {BACKUP_FOLDER}")
 
-print("✅ Authentication complete! 🔐")
+safe_print("✅ Authentication complete! 🔐")
 
 # %% [markdown]
 # ## Step 3: Configuration 📋
@@ -194,10 +194,10 @@ BACKUP_PREFIX = "TE_Backup"
 try:
     spreadsheet = gc.open_by_key(SPREADSHEET_ID)
     worksheet = spreadsheet.worksheet(SHEET_NAME)
-    print(f"✅ Connected to '{spreadsheet.title}' - Sheet: '{SHEET_NAME}' 🔗")
+    safe_print(f"✅ Connected to '{spreadsheet.title}' - Sheet: '{SHEET_NAME}' 🔗")
 except Exception as e:
-    print(f"❌ Connection error: {e}")
-    print("\n💡 Make sure you've shared the spreadsheet with your service account email!")
+    safe_print(f"❌ Connection error: {e}")
+    safe_print("\n💡 Make sure you've shared the spreadsheet with your service account email!")
     raise
 
 # %% [markdown]
@@ -230,31 +230,31 @@ def get_backup_status():
     
     backups.sort(key=lambda x: x['date'], reverse=True)
     
-    print("=" * 60)
-    print("💾 BACKUP STATUS DASHBOARD")
-    print("=" * 60)
+    safe_print("=" * 60)
+    safe_print("💾 BACKUP STATUS DASHBOARD")
+    safe_print("=" * 60)
     
     if backups:
-        print(f"\n📊 Total Backups: {len(backups)}")
-        print(f"📅 Latest Backup: {backups[0]['date'].strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"📁 Location: {BACKUP_FOLDER}")
+        safe_print(f"\n📊 Total Backups: {len(backups)}")
+        safe_print(f"📅 Latest Backup: {backups[0]['date'].strftime('%Y-%m-%d %H:%M:%S')}")
+        safe_print(f"📁 Location: {BACKUP_FOLDER}")
         
         days_since = (datetime.now() - backups[0]['date']).days
         if days_since == 0:
-            print(f"⏰ Last Backup: Today! ✅")
+            safe_print(f"⏰ Last Backup: Today! ✅")
         elif days_since == 1:
-            print(f"⏰ Last Backup: Yesterday ⚠️")
+            safe_print(f"⏰ Last Backup: Yesterday ⚠️")
         else:
-            print(f"⏰ Last Backup: {days_since} days ago {'⚠️' if days_since > 7 else ''}")
+            safe_print(f"⏰ Last Backup: {days_since} days ago {'⚠️' if days_since > 7 else ''}")
         
-        print(f"\n📋 Recent Backups (Last 5):")
-        print("-" * 60)
+        safe_print(f"\n📋 Recent Backups (Last 5):")
+        safe_print("-" * 60)
         for i, b in enumerate(backups[:5]):
-            print(f"  {i+1}. {b['filename']} ({b['size_kb']} KB)")
+            safe_print(f"  {i+1}. {b['filename']} ({b['size_kb']} KB)")
     else:
-        print("\n⚠️ No backups found! Run create_backup() to start! 🚀")
+        safe_print("\n⚠️ No backups found! Run create_backup() to start! 🚀")
     
-    print("=" * 60)
+    safe_print("=" * 60)
     return backups
 
 # Show current status
@@ -273,20 +273,20 @@ def calculate_checksum(data):
 def create_backup(include_csv=True):
     """Create a complete backup of the spreadsheet! 💾"""
     
-    print("\n" + "=" * 60)
-    print("💾 CREATING BACKUP")
-    print("=" * 60)
+    safe_print("\n" + "=" * 60)
+    safe_print("💾 CREATING BACKUP")
+    safe_print("=" * 60)
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
     # Fetch data
-    print("\n📥 Step 1: Fetching data from spreadsheet...")
+    safe_print("\n📥 Step 1: Fetching data from spreadsheet...")
     data = worksheet.get_all_records()
     headers = worksheet.row_values(1)
-    print(f"   ✅ Fetched {len(data)} rows with {len(headers)} columns")
+    safe_print(f"   ✅ Fetched {len(data)} rows with {len(headers)} columns")
     
     # Create backup object
-    print("\n📦 Step 2: Preparing backup package...")
+    safe_print("\n📦 Step 2: Preparing backup package...")
     backup_obj = {
         'metadata': {
             'backup_timestamp': timestamp,
@@ -305,12 +305,12 @@ def create_backup(include_csv=True):
     }
     
     # Calculate checksum
-    print("\n🔐 Step 3: Calculating data checksum...")
+    safe_print("\n🔐 Step 3: Calculating data checksum...")
     backup_obj['metadata']['checksum'] = calculate_checksum(data)
-    print(f"   ✅ Checksum: {backup_obj['metadata']['checksum'][:16]}...")
+    safe_print(f"   ✅ Checksum: {backup_obj['metadata']['checksum'][:16]}...")
     
     # Save JSON
-    print("\n💾 Step 4: Saving JSON backup...")
+    safe_print("\n💾 Step 4: Saving JSON backup...")
     json_filename = f"{BACKUP_PREFIX}_{timestamp}.json"
     json_filepath = os.path.join(BACKUP_FOLDER, json_filename)
     
@@ -318,11 +318,11 @@ def create_backup(include_csv=True):
         json.dump(backup_obj, f, ensure_ascii=False, indent=2)
     
     json_size = os.path.getsize(json_filepath) / 1024
-    print(f"   ✅ Saved: {json_filename} ({json_size:.2f} KB)")
+    safe_print(f"   ✅ Saved: {json_filename} ({json_size:.2f} KB)")
     
     # Save CSV
     if include_csv:
-        print("\n📊 Step 5: Saving CSV backup...")
+        safe_print("\n📊 Step 5: Saving CSV backup...")
         csv_filename = f"{BACKUP_PREFIX}_{timestamp}.csv"
         csv_filepath = os.path.join(BACKUP_FOLDER, csv_filename)
         
@@ -330,23 +330,23 @@ def create_backup(include_csv=True):
         df.to_csv(csv_filepath, index=False, encoding='utf-8')
         
         csv_size = os.path.getsize(csv_filepath) / 1024
-        print(f"   ✅ Saved: {csv_filename} ({csv_size:.2f} KB)")
+        safe_print(f"   ✅ Saved: {csv_filename} ({csv_size:.2f} KB)")
     
     # Cleanup old backups
-    print("\n🧹 Step 6: Managing backup rotation...")
+    safe_print("\n🧹 Step 6: Managing backup rotation...")
     cleanup_old_backups()
     
     # Verify
-    print("\n✅ Step 7: Verifying backup...")
+    safe_print("\n✅ Step 7: Verifying backup...")
     verify_backup(json_filepath)
     
-    print("\n" + "=" * 60)
-    print("🎉 BACKUP COMPLETE!")
-    print("=" * 60)
-    print(f"\n📁 Location: {BACKUP_FOLDER}")
-    print(f"📄 Filename: {json_filename}")
-    print(f"📊 Rows: {len(data)}")
-    print(f"💾 Size: {json_size:.2f} KB")
+    safe_print("\n" + "=" * 60)
+    safe_print("🎉 BACKUP COMPLETE!")
+    safe_print("=" * 60)
+    safe_print(f"\n📁 Location: {BACKUP_FOLDER}")
+    safe_print(f"📄 Filename: {json_filename}")
+    safe_print(f"📊 Rows: {len(data)}")
+    safe_print(f"💾 Size: {json_size:.2f} KB")
     
     return json_filepath
 
@@ -368,13 +368,13 @@ def verify_backup(filepath):
         actual = calculate_checksum(backup['data'])
         
         if expected == actual:
-            print(f"   ✅ Integrity verified! Checksum matches! 🔐")
+            safe_print(f"   ✅ Integrity verified! Checksum matches! 🔐")
             return True
         else:
-            print(f"   ❌ INTEGRITY ERROR! Checksum mismatch! ⚠️")
+            safe_print(f"   ❌ INTEGRITY ERROR! Checksum mismatch! ⚠️")
             return False
     except Exception as e:
-        print(f"   ❌ Verification failed: {e}")
+        safe_print(f"   ❌ Verification failed: {e}")
         return False
 
 # %% [markdown]
@@ -384,7 +384,7 @@ def verify_backup(filepath):
 def cleanup_old_backups():
     """Remove old backups to maintain rotation! 🧹"""
     if not os.path.exists(BACKUP_FOLDER):
-        print("   ⚠️ Backup folder doesn't exist yet")
+        safe_print("   ⚠️ Backup folder doesn't exist yet")
         return
     
     backups = []
@@ -396,9 +396,9 @@ def cleanup_old_backups():
                     stat = os.stat(filepath)
                     backups.append({'filename': f, 'mtime': stat.st_mtime, 'filepath': filepath})
                 except OSError as e:
-                    print(f"   ⚠️ Could not stat {f}: {e}")
+                    safe_print(f"   ⚠️ Could not stat {f}: {e}")
     except OSError as e:
-        print(f"   ❌ Error reading backup folder: {e}")
+        safe_print(f"   ❌ Error reading backup folder: {e}")
         return
     
     backups.sort(key=lambda x: x['mtime'])
@@ -410,14 +410,14 @@ def cleanup_old_backups():
             csv_path = oldest['filepath'].replace('.json', '.csv')
             if os.path.exists(csv_path):
                 os.remove(csv_path)
-            print(f"   🗑️ Removed: {oldest['filename']}")
+            safe_print(f"   🗑️ Removed: {oldest['filename']}")
         except OSError as e:
-            print(f"   ⚠️ Could not remove {oldest['filename']}: {e}")
+            safe_print(f"   ⚠️ Could not remove {oldest['filename']}: {e}")
     
     # Count only backup files with proper prefix
     remaining = len([f for f in os.listdir(BACKUP_FOLDER) 
                     if f.endswith('.json') and f.startswith(BACKUP_PREFIX)])
-    print(f"   ✅ Keeping {remaining} backups")
+    safe_print(f"   ✅ Keeping {remaining} backups")
 
 # %% [markdown]
 # ## Step 8: 🔄 Detect Changes
@@ -425,13 +425,13 @@ def cleanup_old_backups():
 # %%
 def detect_changes():
     """Detect what changed since the last backup! 🔄"""
-    print("\n" + "=" * 60)
-    print("🔄 CHANGE DETECTION")
-    print("=" * 60)
+    safe_print("\n" + "=" * 60)
+    safe_print("🔄 CHANGE DETECTION")
+    safe_print("=" * 60)
     
     backups = get_backup_status()
     if not backups:
-        print("\n⚠️ No previous backups found!")
+        safe_print("\n⚠️ No previous backups found!")
         return None
     
     with open(backups[0]['filepath'], 'r', encoding='utf-8') as f:
@@ -441,15 +441,15 @@ def detect_changes():
     current_data = worksheet.get_all_records()
     new_checksum = calculate_checksum(current_data)
     
-    print(f"\n📊 Backup rows: {backup_data['metadata']['row_count']}")
-    print(f"📊 Current rows: {len(current_data)}")
+    safe_print(f"\n📊 Backup rows: {backup_data['metadata']['row_count']}")
+    safe_print(f"📊 Current rows: {len(current_data)}")
     
     if old_checksum != new_checksum:
-        print(f"\n⚠️ CHANGES DETECTED!")
-        print(f"💡 Run create_backup() to save changes!")
+        safe_print(f"\n⚠️ CHANGES DETECTED!")
+        safe_print(f"💡 Run create_backup() to save changes!")
         return True
     else:
-        print(f"\n✅ No changes since last backup! 🎉")
+        safe_print(f"\n✅ No changes since last backup! 🎉")
         return False
 
 # %% [markdown]
@@ -461,7 +461,7 @@ def list_available_backups():
     backups = []
     
     if not os.path.exists(BACKUP_FOLDER):
-        print("⚠️ Backup folder doesn't exist!")
+        safe_print("⚠️ Backup folder doesn't exist!")
         return backups
     
     try:
@@ -478,20 +478,20 @@ def list_available_backups():
                         'rows': backup['metadata'].get('row_count', 0)
                     })
                 except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
-                    print(f"   ⚠️ Skipping corrupted backup {f}: {e}")
+                    safe_print(f"   ⚠️ Skipping corrupted backup {f}: {e}")
     except OSError as e:
-        print(f"❌ Error reading backup folder: {e}")
+        safe_print(f"❌ Error reading backup folder: {e}")
         return backups
     
     backups.sort(key=lambda x: x['date'], reverse=True)
     
-    print("=" * 70)
-    print("📋 AVAILABLE BACKUPS")
-    print("=" * 70)
+    safe_print("=" * 70)
+    safe_print("📋 AVAILABLE BACKUPS")
+    safe_print("=" * 70)
     for i, b in enumerate(backups):
         date_display = b['date'][:19] if len(b['date']) >= 19 else b['date']
-        print(f"  {i+1}. {date_display} | {b['rows']} rows | {b['filename']}")
-    print("=" * 70)
+        safe_print(f"  {i+1}. {date_display} | {b['rows']} rows | {b['filename']}")
+    safe_print("=" * 70)
     
     return backups
 
@@ -500,34 +500,34 @@ def restore_from_backup(backup_number=None, create_safety_backup=True):
     backups = list_available_backups()
     
     if not backup_number:
-        print("\n💡 Usage: restore_from_backup(1) to restore from backup #1")
+        safe_print("\n💡 Usage: restore_from_backup(1) to restore from backup #1")
         return False
     
     if backup_number < 1 or backup_number > len(backups):
-        print(f"❌ Invalid number! Choose 1-{len(backups)}")
+        safe_print(f"❌ Invalid number! Choose 1-{len(backups)}")
         return False
     
     backup_filepath = backups[backup_number - 1]['filepath']
     
-    print(f"\n📂 Loading: {os.path.basename(backup_filepath)}")
+    safe_print(f"\n📂 Loading: {os.path.basename(backup_filepath)}")
     
     if not verify_backup(backup_filepath):
-        print("❌ Integrity check failed!")
+        safe_print("❌ Integrity check failed!")
         return False
     
     if create_safety_backup:
-        print("\n💾 Creating safety backup first...")
+        safe_print("\n💾 Creating safety backup first...")
         create_backup(include_csv=False)
     
-    print("\n⚠️ This will OVERWRITE your spreadsheet!")
+    safe_print("\n⚠️ This will OVERWRITE your spreadsheet!")
     try:
         confirm = input("Type 'RESTORE' to confirm: ").strip()
     except (EOFError, KeyboardInterrupt):
-        print("\n❌ Cancelled.")
+        safe_print("\n❌ Cancelled.")
         return False
     
     if not confirm or confirm.upper() != 'RESTORE':
-        print("❌ Cancelled.")
+        safe_print("❌ Cancelled.")
         return False
     
     with open(backup_filepath, 'r') as f:
@@ -545,7 +545,7 @@ def restore_from_backup(backup_number=None, create_safety_backup=True):
         for i, row in df.iterrows():
             worksheet.append_row(row.tolist())
     
-    print(f"\n🎉 Restored {len(backup['data'])} rows!")
+    safe_print(f"\n🎉 Restored {len(backup['data'])} rows!")
     return True
 
 # %% [markdown]
@@ -556,7 +556,7 @@ def download_latest_backup():
     """Download the latest backup! 📤"""
     backups = get_backup_status()
     if not backups:
-        print("❌ No backups found!")
+        safe_print("❌ No backups found!")
         return
     
     filepath = backups[0]['filepath']
@@ -568,8 +568,8 @@ def download_latest_backup():
         if os.path.exists(csv_path):
             files.download(csv_path)
     else:
-        print(f"📁 Backup location: {filepath}")
-        print(f"📁 Open folder: {BACKUP_FOLDER}")
+        safe_print(f"📁 Backup location: {filepath}")
+        safe_print(f"📁 Open folder: {BACKUP_FOLDER}")
 
 # %% [markdown]
 # ## 🎯 Quick Menu
@@ -577,7 +577,7 @@ def download_latest_backup():
 # %%
 def show_menu():
     """Display quick action menu! 🎯"""
-    print("""
+    safe_print("""
 ╔══════════════════════════════════════════════════════════════╗
 ║               💾 BACKUP SYSTEM MENU                          ║
 ╠══════════════════════════════════════════════════════════════╣
@@ -598,20 +598,20 @@ show_menu()
 # %%
 # Run this to create a backup now!
 if __name__ == "__main__":
-    print("\n💡 Running in standalone mode...")
-    print("💡 Commands available: create_backup(), detect_changes(), etc.")
+    safe_print("\n💡 Running in standalone mode...")
+    safe_print("💡 Commands available: create_backup(), detect_changes(), etc.")
     
     # Auto-run status check
     get_backup_status()
     
     # Prompt for action
-    print("\n🤔 Would you like to create a backup now? (y/n)")
+    safe_print("\n🤔 Would you like to create a backup now? (y/n)")
     try:
         answer = input("> ").strip().lower()
         if answer == 'y':
             create_backup()
     except (EOFError, KeyboardInterrupt):
-        print("\n💡 Run create_backup() manually to create a backup!")
+        safe_print("\n💡 Run create_backup() manually to create a backup!")
     except Exception as e:
-        print(f"\n⚠️ Input error: {e}")
-        print("💡 Run create_backup() manually to create a backup!")
+        safe_print(f"\n⚠️ Input error: {e}")
+        safe_print("💡 Run create_backup() manually to create a backup!")

@@ -56,9 +56,9 @@ try:
     FUZZY_AVAILABLE = True
 except ImportError:
     FUZZY_AVAILABLE = False
-    print("⚠️ rapidfuzz not available - using basic matching")
+    safe_print("⚠️ rapidfuzz not available - using basic matching")
 
-print("✅ Libraries imported!")
+safe_print("✅ Libraries imported!")
 
 # %% [markdown]
 # ## Step 2: Authentication 🔐
@@ -87,7 +87,7 @@ else:
     else:
         gc = gspread.oauth()
 
-print("✅ Authenticated!")
+safe_print("✅ Authenticated!")
 
 # %% [markdown]
 # ## Step 3: Load Data 📥
@@ -105,10 +105,10 @@ try:
     worksheet = spreadsheet.worksheet(SHEET_NAME)
     data = worksheet.get_all_records()
     df = pd.DataFrame(data)
-    print(f"✅ Loaded {len(df)} shortcuts!")
+    safe_print(f"✅ Loaded {len(df)} shortcuts!")
 except Exception as e:
-    print(f"❌ Error loading spreadsheet: {e}")
-    print("💡 Make sure you've shared the spreadsheet with your service account!")
+    safe_print(f"❌ Error loading spreadsheet: {e}")
+    safe_print("💡 Make sure you've shared the spreadsheet with your service account!")
 
 # %% [markdown]
 # ## Step 4: Find Exact Duplicates 🔄
@@ -116,12 +116,12 @@ except Exception as e:
 # %%
 def find_exact_duplicates():
     """Find exact duplicate content! 🔄"""
-    print("\n" + "=" * 60)
-    print("🔄 EXACT DUPLICATES")
-    print("=" * 60)
+    safe_print("\n" + "=" * 60)
+    safe_print("🔄 EXACT DUPLICATES")
+    safe_print("=" * 60)
     
     if 'Content' not in df.columns:
-        print("❌ No Content column!")
+        safe_print("❌ No Content column!")
         return None
     
     # Find duplicate content
@@ -129,7 +129,7 @@ def find_exact_duplicates():
     duplicates = df[dup_mask].copy()
     
     if len(duplicates) == 0:
-        print("\n✅ No exact duplicates found!")
+        safe_print("\n✅ No exact duplicates found!")
         return None
     
     # Group by content
@@ -139,15 +139,15 @@ def find_exact_duplicates():
     grouped['Count'] = grouped['Snippet Name'].apply(len)
     grouped = grouped[grouped['Count'] > 1].sort_values('Count', ascending=False)
     
-    print(f"\n⚠️ Found {len(grouped)} duplicate groups!")
-    print(f"   Total duplicate rows: {len(duplicates)}")
+    safe_print(f"\n⚠️ Found {len(grouped)} duplicate groups!")
+    safe_print(f"   Total duplicate rows: {len(duplicates)}")
     
-    print("\n📋 Top Duplicates:")
-    print("-" * 60)
+    safe_print("\n📋 Top Duplicates:")
+    safe_print("-" * 60)
     for _, row in grouped.head(10).iterrows():
         content_preview = str(row['Content'])[:40]
-        print(f"  '{content_preview}...' ({row['Count']} copies)")
-        print(f"    Names: {', '.join(row['Snippet Name'][:3])}")
+        safe_print(f"  '{content_preview}...' ({row['Count']} copies)")
+        safe_print(f"    Names: {', '.join(row['Snippet Name'][:3])}")
     
     return grouped
 
@@ -159,16 +159,16 @@ exact_dups = find_exact_duplicates()
 # %%
 def find_similar_content(threshold=85, sample_size=500):
     """Find similar (not exact) content using fuzzy matching! 🎯"""
-    print("\n" + "=" * 60)
-    print("🎯 SIMILAR CONTENT DETECTION")
-    print("=" * 60)
+    safe_print("\n" + "=" * 60)
+    safe_print("🎯 SIMILAR CONTENT DETECTION")
+    safe_print("=" * 60)
     
     if not FUZZY_AVAILABLE:
-        print("⚠️ Install rapidfuzz for fuzzy matching!")
+        safe_print("⚠️ Install rapidfuzz for fuzzy matching!")
         return None
     
     if 'Content' not in df.columns:
-        print("❌ No Content column!")
+        safe_print("❌ No Content column!")
         return None
     
     # Sample for performance
@@ -177,7 +177,7 @@ def find_similar_content(threshold=85, sample_size=500):
     
     similar_pairs = []
     
-    print(f"🔍 Comparing {len(contents)} samples (threshold: {threshold}%)...")
+    safe_print(f"🔍 Comparing {len(contents)} samples (threshold: {threshold}%)...")
     
     for i, content1 in enumerate(contents):
         if len(content1) < 3:
@@ -199,19 +199,19 @@ def find_similar_content(threshold=85, sample_size=500):
                 })
     
     if not similar_pairs:
-        print(f"\n✅ No similar content found above {threshold}% threshold!")
+        safe_print(f"\n✅ No similar content found above {threshold}% threshold!")
         return None
     
     similar_df = pd.DataFrame(similar_pairs).sort_values('similarity', ascending=False)
     
-    print(f"\n⚠️ Found {len(similar_df)} similar pairs!")
-    print("\n📋 Top Similar Pairs:")
-    print("-" * 60)
+    safe_print(f"\n⚠️ Found {len(similar_df)} similar pairs!")
+    safe_print("\n📋 Top Similar Pairs:")
+    safe_print("-" * 60)
     
     for _, row in similar_df.head(5).iterrows():
-        print(f"  {row['similarity']}% similar:")
-        print(f"    '{row['content1']}'")
-        print(f"    '{row['content2']}'")
+        safe_print(f"  {row['similarity']}% similar:")
+        safe_print(f"    '{row['content1']}'")
+        safe_print(f"    '{row['content2']}'")
     
     return similar_df
 
@@ -223,27 +223,27 @@ similar_pairs = find_similar_content(threshold=85, sample_size=300)
 # %%
 def find_duplicate_names():
     """Find shortcuts with the same name! 🏷️"""
-    print("\n" + "=" * 60)
-    print("🏷️ DUPLICATE NAMES")
-    print("=" * 60)
+    safe_print("\n" + "=" * 60)
+    safe_print("🏷️ DUPLICATE NAMES")
+    safe_print("=" * 60)
     
     if 'Snippet Name' not in df.columns:
-        print("❌ No Snippet Name column!")
+        safe_print("❌ No Snippet Name column!")
         return None
     
     name_counts = df['Snippet Name'].value_counts()
     duplicates = name_counts[name_counts > 1]
     
     if len(duplicates) == 0:
-        print("\n✅ All snippet names are unique!")
+        safe_print("\n✅ All snippet names are unique!")
         return None
     
-    print(f"\n⚠️ Found {len(duplicates)} duplicate names!")
+    safe_print(f"\n⚠️ Found {len(duplicates)} duplicate names!")
     
-    print("\n📋 Duplicate Names:")
-    print("-" * 60)
+    safe_print("\n📋 Duplicate Names:")
+    safe_print("-" * 60)
     for name, count in duplicates.head(10).items():
-        print(f"  '{name}' appears {count} times")
+        safe_print(f"  '{name}' appears {count} times")
     
     return duplicates
 
@@ -255,9 +255,9 @@ duplicate_names = find_duplicate_names()
 # %%
 def generate_recommendations():
     """Generate cleanup recommendations! 🧹"""
-    print("\n" + "=" * 60)
-    print("🧹 CLEANUP RECOMMENDATIONS")
-    print("=" * 60)
+    safe_print("\n" + "=" * 60)
+    safe_print("🧹 CLEANUP RECOMMENDATIONS")
+    safe_print("=" * 60)
     
     recs = []
     
@@ -273,11 +273,11 @@ def generate_recommendations():
         recs.append(f"🏷️ Resolve {len(duplicate_names)} naming conflicts")
     
     if recs:
-        print("\n📋 Action Items:")
+        safe_print("\n📋 Action Items:")
         for i, rec in enumerate(recs, 1):
-            print(f"   {i}. {rec}")
+            safe_print(f"   {i}. {rec}")
     else:
-        print("\n✅ Your data is clean! No duplicates found!")
+        safe_print("\n✅ Your data is clean! No duplicates found!")
     
     return recs
 
@@ -292,12 +292,12 @@ def export_reports():
     if exact_dups is not None:
         file = os.path.join(OUTPUT_FOLDER, "exact_duplicates.csv")
         exact_dups.to_csv(file, index=False)
-        print(f"✅ Exported: {file}")
+        safe_print(f"✅ Exported: {file}")
     
     if similar_pairs is not None:
         file = os.path.join(OUTPUT_FOLDER, "similar_content.csv")
         similar_pairs.to_csv(file, index=False)
-        print(f"✅ Exported: {file}")
+        safe_print(f"✅ Exported: {file}")
         
     if IN_COLAB:
         from google.colab import files
@@ -313,7 +313,7 @@ export_reports()
 
 # %%
 def show_menu():
-    print("""
+    safe_print("""
 ╔═══════════════════════════════════════════════════════╗
 ║         🔍 DUPLICATE FINDER                           ║
 ╠═══════════════════════════════════════════════════════╣
@@ -329,4 +329,4 @@ show_menu()
 
 # %%
 if __name__ == "__main__":
-    print("\n🎉 Duplicate Finder ready!")
+    safe_print("\n🎉 Duplicate Finder ready!")

@@ -63,7 +63,7 @@ except ImportError:
 plt.style.use('seaborn-v0_8-whitegrid')
 sns.set_palette("husl")
 
-print("✅ Libraries imported!")
+safe_print("✅ Libraries imported!")
 
 # %% [markdown]
 # ## Step 2: Authentication 🔐
@@ -92,7 +92,7 @@ else:
     else:
         gc = gspread.oauth()
 
-print("✅ Authenticated!")
+safe_print("✅ Authenticated!")
 
 # %% [markdown]
 # ## Step 3: Load Data 📥
@@ -115,10 +115,10 @@ try:
     df['content_length'] = df['Content'].astype(str).str.len() if 'Content' in df.columns else 0
     df['name_length'] = df['Snippet Name'].astype(str).str.len() if 'Snippet Name' in df.columns else 0
     
-    print(f"✅ Loaded {len(df)} shortcuts!")
+    safe_print(f"✅ Loaded {len(df)} shortcuts!")
 except Exception as e:
-    print(f"❌ Error loading spreadsheet: {e}")
-    print("💡 Make sure you've shared the spreadsheet with your service account!")
+    safe_print(f"❌ Error loading spreadsheet: {e}")
+    safe_print("💡 Make sure you've shared the spreadsheet with your service account!")
 
 # %% [markdown]
 # ## Step 4: Overview Dashboard 📊
@@ -126,19 +126,19 @@ except Exception as e:
 # %%
 def create_overview():
     """Create overview dashboard! 📊"""
-    print("=" * 60)
-    print("📊 ANALYTICS DASHBOARD")
-    print("=" * 60)
+    safe_print("=" * 60)
+    safe_print("📊 ANALYTICS DASHBOARD")
+    safe_print("=" * 60)
     
-    print(f"\n📦 Total Shortcuts: {len(df)}")
-    print(f"📋 Total Columns: {len(df.columns)}")
+    safe_print(f"\n📦 Total Shortcuts: {len(df)}")
+    safe_print(f"📋 Total Columns: {len(df.columns)}")
     
     if 'MainCategory' in df.columns:
         cats = df['MainCategory'].nunique()
-        print(f"🏷️ Categories: {cats}")
+        safe_print(f"🏷️ Categories: {cats}")
     
     if 'content_length' in df.columns:
-        print(f"📏 Avg Content Length: {df['content_length'].mean():.1f} chars")
+        safe_print(f"📏 Avg Content Length: {df['content_length'].mean():.1f} chars")
     
     return df.describe()
 
@@ -151,7 +151,7 @@ overview = create_overview()
 def plot_category_distribution():
     """Create category distribution chart! 🥧"""
     if 'MainCategory' not in df.columns:
-        print("❌ No MainCategory column!")
+        safe_print("❌ No MainCategory column!")
         return
     
     cat_counts = df['MainCategory'].value_counts()
@@ -171,7 +171,7 @@ def plot_category_distribution():
         plt.tight_layout()
         plt.savefig(os.path.join(OUTPUT_FOLDER, "category_distribution.png"))
         plt.show()
-        print(f"✅ Saved: category_distribution.png")
+        safe_print(f"✅ Saved: category_distribution.png")
 
 plot_category_distribution()
 
@@ -182,7 +182,7 @@ plot_category_distribution()
 def plot_content_length():
     """Create content length histogram! 📏"""
     if 'content_length' not in df.columns:
-        print("❌ No content length data!")
+        safe_print("❌ No content length data!")
         return
     
     if PLOTLY_AVAILABLE:
@@ -203,7 +203,7 @@ def plot_content_length():
         plt.tight_layout()
         plt.savefig(os.path.join(OUTPUT_FOLDER, "content_length.png"))
         plt.show()
-        print(f"✅ Saved: content_length.png")
+        safe_print(f"✅ Saved: content_length.png")
 
 plot_content_length()
 
@@ -214,11 +214,11 @@ plot_content_length()
 def plot_category_sunburst():
     """Create hierarchical sunburst chart! 🌞"""
     if not PLOTLY_AVAILABLE:
-        print("⚠️ Plotly required for sunburst chart!")
+        safe_print("⚠️ Plotly required for sunburst chart!")
         return
     
     if 'MainCategory' not in df.columns:
-        print("❌ No MainCategory column!")
+        safe_print("❌ No MainCategory column!")
         return
     
     # Prepare data
@@ -251,7 +251,7 @@ plot_category_sunburst()
 def plot_length_by_category():
     """Create box plot of length by category! 📦"""
     if 'MainCategory' not in df.columns or 'content_length' not in df.columns:
-        print("❌ Missing required columns!")
+        safe_print("❌ Missing required columns!")
         return
     
     if PLOTLY_AVAILABLE:
@@ -279,22 +279,22 @@ plot_length_by_category()
 # %%
 def print_summary():
     """Print final summary! 🎯"""
-    print("\n" + "=" * 60)
-    print("🎯 SUMMARY STATISTICS")
-    print("=" * 60)
+    safe_print("\n" + "=" * 60)
+    safe_print("🎯 SUMMARY STATISTICS")
+    safe_print("=" * 60)
     
-    print(f"\n📦 Total Shortcuts: {len(df)}")
+    safe_print(f"\n📦 Total Shortcuts: {len(df)}")
     
     if 'content_length' in df.columns:
-        print(f"\n📏 Content Length Stats:")
-        print(f"   Shortest: {df['content_length'].min()} chars")
-        print(f"   Longest: {df['content_length'].max()} chars")
-        print(f"   Average: {df['content_length'].mean():.1f} chars")
+        safe_print(f"\n📏 Content Length Stats:")
+        safe_print(f"   Shortest: {df['content_length'].min()} chars")
+        safe_print(f"   Longest: {df['content_length'].max()} chars")
+        safe_print(f"   Average: {df['content_length'].mean():.1f} chars")
     
     if 'MainCategory' in df.columns:
-        print(f"\n🏷️ Top Categories:")
+        safe_print(f"\n🏷️ Top Categories:")
         for cat, count in df['MainCategory'].value_counts().head(5).items():
-            print(f"   {cat}: {count}")
+            safe_print(f"   {cat}: {count}")
 
 print_summary()
 
@@ -303,7 +303,7 @@ print_summary()
 
 # %%
 def show_menu():
-    print("""
+    safe_print("""
 ╔═══════════════════════════════════════════════════════╗
 ║         📈 ANALYTICS DASHBOARD                        ║
 ╠═══════════════════════════════════════════════════════╣
@@ -320,4 +320,4 @@ show_menu()
 
 # %%
 if __name__ == "__main__":
-    print("\n🎉 Analytics Dashboard ready!")
+    safe_print("\n🎉 Analytics Dashboard ready!")

@@ -8,9 +8,22 @@ and syncs data across Google Sheets.
 import re
 import json
 import sys
+from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional
 from collections import defaultdict
 import logging
+
+# Add tools directory to path for imports
+current_dir = Path(__file__).resolve().parent if '__file__' in dir() else Path.cwd()
+if str(current_dir) not in sys.path:
+    sys.path.insert(0, str(current_dir))
+
+# Import shared compatibility module
+try:
+    from colab_compat import ColabCompat, safe_print
+except ImportError:
+    sys.path.append("tools")
+    from tools.colab_compat import ColabCompat, safe_print
 
 try:
     import pandas as pd
@@ -21,8 +34,8 @@ try:
     from nltk.corpus import stopwords
     from nltk.tokenize import word_tokenize
 except ImportError as e:
-    print(f"❌ Missing dependency: {e}")
-    print("📦 Install with: pip install pandas numpy scikit-learn nltk")
+    safe_print(f"❌ Missing dependency: {e}")
+    safe_print("📦 Install with: pip install pandas numpy scikit-learn nltk")
     sys.exit(1)
 
 # Configure logging
@@ -464,10 +477,10 @@ def main():
         result = categorizer.process_shortcuts_sheet(sample_data)
         
         # Display results
-        print("\n📊 CATEGORIZATION RESULTS:")
-        print("=" * 80)
-        print(result.to_string(index=False))
-        print("=" * 80)
+        safe_print("\n📊 CATEGORIZATION RESULTS:")
+        safe_print("=" * 80)
+        safe_print(result.to_string(index=False))
+        safe_print("=" * 80)
         
         # Export to CSV
         output_file = 'categorized_text_expanders.csv'

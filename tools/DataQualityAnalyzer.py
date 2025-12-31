@@ -53,7 +53,7 @@ warnings.filterwarnings('ignore')
 plt.style.use('seaborn-v0_8-whitegrid')
 sns.set_palette("husl")
 
-print("✅ Libraries imported!")
+safe_print("✅ Libraries imported!")
 
 # %% [markdown]
 # ## Step 2: Authentication 🔐
@@ -63,10 +63,10 @@ print("✅ Libraries imported!")
 MOCK_MODE = False
 try:
     gc = compat.get_gspread_client()
-    print("✅ Authenticated successfully!")
+    safe_print("✅ Authenticated successfully!")
 except Exception as e:
-    print(f"⚠️ Authentication failed: {e}")
-    print("🚀 Switching to MOCK MODE for testing/demo purposes.")
+    safe_print(f"⚠️ Authentication failed: {e}")
+    safe_print("🚀 Switching to MOCK MODE for testing/demo purposes.")
     MOCK_MODE = True
     gc = None
 
@@ -82,7 +82,7 @@ OUTPUT_FOLDER = str(compat.base_path)
 df = None
 
 if MOCK_MODE:
-    print("\n🚧 MOCK MODE: Generating dummy data for logic testing...")
+    safe_print("\n🚧 MOCK MODE: Generating dummy data for logic testing...")
     # Create valid dummy dataframe with some intentional quality issues for testing
     data = {
         'Snippet Name': ['addr', '', 'sig', 'meeting', 'date'],
@@ -92,7 +92,7 @@ if MOCK_MODE:
         'Language': ['en', 'en', '', 'en', 'es']
     }
     df = pd.DataFrame(data)
-    print(f"📊 Mock Data Loaded: {len(df)} rows (with intentional empty fields)")
+    safe_print(f"📊 Mock Data Loaded: {len(df)} rows (with intentional empty fields)")
 
 else:
     try:
@@ -100,10 +100,10 @@ else:
         worksheet = spreadsheet.worksheet(SHEET_NAME)
         data = worksheet.get_all_records()
         df = pd.DataFrame(data)
-        print(f"✅ Loaded {len(df)} shortcuts!")
-        print(f"📋 Columns: {list(df.columns)}")
+        safe_print(f"✅ Loaded {len(df)} shortcuts!")
+        safe_print(f"📋 Columns: {list(df.columns)}")
     except Exception as e:
-        print(f"❌ Error loading spreadsheet: {e}")
+        safe_print(f"❌ Error loading spreadsheet: {e}")
         raise
 
 # %% [markdown]
@@ -112,17 +112,17 @@ else:
 # %%
 def generate_overview():
     """Generate overview statistics! 📈"""
-    print("=" * 60)
-    print("📊 DATA QUALITY OVERVIEW")
-    print("=" * 60)
+    safe_print("=" * 60)
+    safe_print("📊 DATA QUALITY OVERVIEW")
+    safe_print("=" * 60)
     
     total = len(df)
-    print(f"\n📦 Total Records: {total}")
-    print(f"📋 Total Columns: {len(df.columns)}")
+    safe_print(f"\n📦 Total Records: {total}")
+    safe_print(f"📋 Total Columns: {len(df.columns)}")
     
     # Check each column
-    print("\n📊 Column Statistics:")
-    print("-" * 60)
+    safe_print("\n📊 Column Statistics:")
+    safe_print("-" * 60)
     
     stats = []
     for col in df.columns:
@@ -130,7 +130,7 @@ def generate_overview():
         empty = df[col].isna().sum() + (df[col] == '').sum()
         fill_rate = (total - empty) / total * 100
         
-        print(f"  {col[:30]:<30} | {fill_rate:>5.1f}% filled | {empty} empty")
+        safe_print(f"  {col[:30]:<30} | {fill_rate:>5.1f}% filled | {empty} empty")
         stats.append({'Column': col, 'Filled %': fill_rate, 'Empty': empty})
     
     return pd.DataFrame(stats)
@@ -146,20 +146,20 @@ def analyze_missing():
     critical = ['Snippet Name', 'Content']
     available_critical = [c for c in critical if c in df.columns]
     
-    print("\n" + "=" * 60)
-    print("❌ MISSING FIELD ANALYSIS")
-    print("=" * 60)
+    safe_print("\n" + "=" * 60)
+    safe_print("❌ MISSING FIELD ANALYSIS")
+    safe_print("=" * 60)
     
     issues = []
     for col in available_critical:
         missing = df[(df[col].isna()) | (df[col] == '')]
         if len(missing) > 0:
-            print(f"\n⚠️ {col}: {len(missing)} missing")
+            safe_print(f"\n⚠️ {col}: {len(missing)} missing")
             for idx, row in missing.head(5).iterrows():
                 issues.append({'Row': idx + 2, 'Column': col, 'Issue': 'Missing'})
     
     if not issues:
-        print("\n✅ No critical missing fields!")
+        safe_print("\n✅ No critical missing fields!")
     
     return pd.DataFrame(issues) if issues else None
 
@@ -172,30 +172,30 @@ missing_report = analyze_missing()
 def analyze_content_length():
     """Analyze content length distribution! 📏"""
     if 'Content' not in df.columns:
-        print("❌ No Content column found!")
+        safe_print("❌ No Content column found!")
         return
     
     df['content_length'] = df['Content'].astype(str).str.len()
     
-    print("\n" + "=" * 60)
-    print("📏 CONTENT LENGTH ANALYSIS")
-    print("=" * 60)
+    safe_print("\n" + "=" * 60)
+    safe_print("📏 CONTENT LENGTH ANALYSIS")
+    safe_print("=" * 60)
     
-    print(f"\n📊 Statistics:")
-    print(f"   Min: {df['content_length'].min()} chars")
-    print(f"   Max: {df['content_length'].max()} chars")
-    print(f"   Mean: {df['content_length'].mean():.1f} chars")
-    print(f"   Median: {df['content_length'].median():.1f} chars")
+    safe_print(f"\n📊 Statistics:")
+    safe_print(f"   Min: {df['content_length'].min()} chars")
+    safe_print(f"   Max: {df['content_length'].max()} chars")
+    safe_print(f"   Mean: {df['content_length'].mean():.1f} chars")
+    safe_print(f"   Median: {df['content_length'].median():.1f} chars")
     
     # Very short content (potential issues)
     very_short = df[df['content_length'] <= 1]
     if len(very_short) > 0:
-        print(f"\n⚠️ Very short content (≤1 char): {len(very_short)} items")
+        safe_print(f"\n⚠️ Very short content (≤1 char): {len(very_short)} items")
     
     # Very long content
     very_long = df[df['content_length'] > 500]
     if len(very_long) > 0:
-        print(f"📝 Long content (>500 chars): {len(very_long)} items")
+        safe_print(f"📝 Long content (>500 chars): {len(very_long)} items")
 
 analyze_content_length()
 
@@ -205,9 +205,9 @@ analyze_content_length()
 # %%
 def calculate_quality_score():
     """Calculate overall data quality score! 🏆"""
-    print("\n" + "=" * 60)
-    print("🏆 DATA QUALITY SCORE")
-    print("=" * 60)
+    safe_print("\n" + "=" * 60)
+    safe_print("🏆 DATA QUALITY SCORE")
+    safe_print("=" * 60)
     
     scores = {}
     
@@ -235,21 +235,21 @@ def calculate_quality_score():
     # Calculate weighted score
     overall = (completeness * 0.4 + content_validity * 0.3 + unique_ratio * 0.3)
     
-    print(f"\n📊 Dimension Scores:")
+    safe_print(f"\n📊 Dimension Scores:")
     for dim, score in scores.items():
         bar = "█" * int(score / 5) + "░" * (20 - int(score / 5))
-        print(f"   {dim:<20} [{bar}] {score:.1f}%")
+        safe_print(f"   {dim:<20} [{bar}] {score:.1f}%")
     
-    print(f"\n🏆 OVERALL QUALITY: {overall:.1f}%")
+    safe_print(f"\n🏆 OVERALL QUALITY: {overall:.1f}%")
     
     if overall >= 90:
-        print("   Grade: A+ Excellent! 🌟")
+        safe_print("   Grade: A+ Excellent! 🌟")
     elif overall >= 80:
-        print("   Grade: A Good! ✅")
+        safe_print("   Grade: A Good! ✅")
     elif overall >= 70:
-        print("   Grade: B Fair ⚠️")
+        safe_print("   Grade: B Fair ⚠️")
     else:
-        print("   Grade: C Needs Improvement 🔧")
+        safe_print("   Grade: C Needs Improvement 🔧")
     
     return overall, scores
 
@@ -261,9 +261,9 @@ quality_score, dimension_scores = calculate_quality_score()
 # %%
 def generate_recommendations():
     """Generate actionable recommendations! 💡"""
-    print("\n" + "=" * 60)
-    print("💡 RECOMMENDATIONS")
-    print("=" * 60)
+    safe_print("\n" + "=" * 60)
+    safe_print("💡 RECOMMENDATIONS")
+    safe_print("=" * 60)
     
     recs = []
     
@@ -287,9 +287,9 @@ def generate_recommendations():
     
     if recs:
         for i, rec in enumerate(recs, 1):
-            print(f"   {i}. {rec}")
+            safe_print(f"   {i}. {rec}")
     else:
-        print("   ✅ No major issues found!")
+        safe_print("   ✅ No major issues found!")
     
     return recs
 
@@ -310,7 +310,7 @@ def export_report():
     }
     
     pd.DataFrame(report_data).to_csv(report_file, index=False)
-    print(f"\n✅ Report exported to: {report_file}")
+    safe_print(f"\n✅ Report exported to: {report_file}")
     
     if IN_COLAB:
         from google.colab import files
@@ -323,7 +323,7 @@ export_report()
 
 # %%
 def show_menu():
-    print("""
+    safe_print("""
 ╔═══════════════════════════════════════════════════════╗
 ║         📊 DATA QUALITY ANALYZER                      ║
 ╠═══════════════════════════════════════════════════════╣
@@ -339,4 +339,4 @@ show_menu()
 
 # %%
 if __name__ == "__main__":
-    print("\n🎉 Data Quality Analyzer ready!")
+    safe_print("\n🎉 Data Quality Analyzer ready!")
