@@ -33,13 +33,26 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Download NLTK data (one-time setup)
-try:
-    nltk.data.find('tokenizers/punkt')
-    nltk.data.find('corpora/stopwords')
-except LookupError:
-    logger.info("📥 Downloading NLTK data...")
-    nltk.download('punkt', quiet=True)
-    nltk.download('stopwords', quiet=True)
+def ensure_nltk_data():
+    """Download required NLTK data packages - compatible with all NLTK versions."""
+    resources = [
+        ('tokenizers/punkt_tab', 'punkt_tab'),  # NLTK 3.8+
+        ('tokenizers/punkt', 'punkt'),           # Legacy fallback
+        ('corpora/stopwords', 'stopwords'),
+    ]
+    
+    for resource_path, package_name in resources:
+        try:
+            nltk.data.find(resource_path)
+        except LookupError:
+            logger.info(f"📥 Downloading NLTK {package_name}...")
+            try:
+                nltk.download(package_name, quiet=True)
+            except Exception as e:
+                logger.warning(f"⚠️ Could not download {package_name}: {e}")
+
+# Initialize NLTK data at module load
+ensure_nltk_data()
 
 
 class FontExtractionError(Exception):
@@ -262,7 +275,7 @@ class FontAwareCategorizer:
                     break
             
             # Keyword matching (40% weight)
-            tokens = word_tokenize(text_lower)
+            tokens = word_tokenize(text_lower) if text_lower.strip() else []
             keyword_matches = sum(1 for token in tokens if token in rules['keywords'])
             if keyword_matches > 0:
                 score += 0.40 * (keyword_matches / len(rules['keywords']))
@@ -370,9 +383,11 @@ class FontAwareCategorizer:
                     
             except Exception as e:
                 logger.error(f"❌ Error processing row {idx}: {str(e)}")
+                # Use locals() to check if raw_entry was defined before the error
+                entry_value = raw_entry if 'raw_entry' in locals() else ''
                 results.append({
-                    'Original_Entry': raw_entry if 'raw_entry' in dir() else '',
-                    'Text_Expander': raw_entry if 'raw_entry' in dir() else '',
+                    'Original_Entry': entry_value,
+                    'Text_Expander': entry_value,
                     'Font_Name': 'Error',
                     'Font_Size': None,
                     'Main_Category': 'General',
