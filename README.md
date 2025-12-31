@@ -3,6 +3,7 @@
 **A powerful Google Apps Script application for text expansion and shortcut management, featuring ML-powered categorization via Python integration.**
 
 [![Deploy to Apps Script](https://github.com/traikdude/G.A.S_Text_Expander_Manager/actions/workflows/clasp-deploy.yml/badge.svg)](https://github.com/traikdude/G.A.S_Text_Expander_Manager/actions/workflows/clasp-deploy.yml)
+[![Python Tests](https://github.com/traikdude/G.A.S_Text_Expander_Manager/actions/workflows/python-tests.yml/badge.svg)](https://github.com/traikdude/G.A.S_Text_Expander_Manager/actions/workflows/python-tests.yml)
 [![Google Apps Script](https://img.shields.io/badge/Built%20with-Google%20Apps%20Script-4285F4?style=for-the-badge&logo=google-drive)](https://developers.google.com/apps-script)
 [![Python](https://img.shields.io/badge/Python-NLP%20Integration-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://colab.research.google.com/)
 [![Status](https://img.shields.io/badge/Status-Active-success?style=for-the-badge)]()
