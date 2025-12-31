@@ -22,6 +22,7 @@ Part of: G.A.S_Text_Expander_Manager
 import os
 import sys
 import json
+import argparse
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 from pathlib import Path
@@ -45,6 +46,61 @@ TFIDF_MAX_FEATURES = 500
 TFIDF_NGRAM_RANGE = (1, 2)
 HIGH_CONFIDENCE_THRESHOLD = 0.6  # For statistics tracking
 LOW_CONFIDENCE_THRESHOLD = 0.3   # For statistics tracking
+
+
+# ============================================================================
+# CLI ARGUMENT PARSING
+# ============================================================================
+
+def parse_args():
+    """
+    Parse command-line arguments.
+    
+    Returns:
+        Namespace with parsed arguments
+    """
+    parser = argparse.ArgumentParser(
+        description='🌉 DriveCategorizerBridge - NLP-based text categorization',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python DriveCategorizerBridge.py                    # Auto-detect environment and run
+  python DriveCategorizerBridge.py --dry-run          # Preview without writing output
+  python DriveCategorizerBridge.py --input in.json --output out.json
+        """
+    )
+    
+    parser.add_argument(
+        '--dry-run', '-n',
+        action='store_true',
+        help='Preview categorization without writing results to output file'
+    )
+    
+    parser.add_argument(
+        '--input', '-i',
+        type=str,
+        help='Custom input file path (overrides auto-detection)'
+    )
+    
+    parser.add_argument(
+        '--output', '-o',
+        type=str,
+        help='Custom output file path (overrides auto-detection)'
+    )
+    
+    parser.add_argument(
+        '--no-progress',
+        action='store_true',
+        help='Disable progress indicators (useful for non-interactive environments)'
+    )
+    
+    parser.add_argument(
+        '--version', '-v',
+        action='version',
+        version='🌉 DriveCategorizerBridge v1.1'
+    )
+    
+    return parser.parse_args()
 
 # ============================================================================
 # ENVIRONMENT DETECTION (Using shared colab_compat module)
@@ -110,6 +166,7 @@ def detect_environment() -> Dict[str, Any]:
 pd = None
 TfidfVectorizer = None
 cosine_similarity = None
+tqdm = None  # Progress bar
 
 def ensure_dependencies(compat: Optional[ColabCompat] = None):
     """
@@ -118,9 +175,9 @@ def ensure_dependencies(compat: Optional[ColabCompat] = None):
     Args:
         compat: Optional ColabCompat instance for package installation
     """
-    global pd, TfidfVectorizer, cosine_similarity
+    global pd, TfidfVectorizer, cosine_similarity, tqdm
     
-    required = ["pandas", "scikit-learn"]
+    required = ["pandas", "scikit-learn", "tqdm"]
     missing = []
     
     for pkg in required:
@@ -145,10 +202,12 @@ def ensure_dependencies(compat: Optional[ColabCompat] = None):
     import pandas
     from sklearn.feature_extraction.text import TfidfVectorizer as TfidfVec
     from sklearn.metrics.pairwise import cosine_similarity as cos_sim
+    from tqdm import tqdm as tqdm_lib
     
     pd = pandas
     TfidfVectorizer = TfidfVec
     cosine_similarity = cos_sim
+    tqdm = tqdm_lib
 
 
 # ============================================================================
@@ -257,16 +316,204 @@ class TextExpanderCategorizer:
 
 
 # ============================================================================
-# BATCH PROCESSING
+# BATCH PROCESSING - HELPER FUNCTIONS
 # ============================================================================
 
-def process_batch(input_path: str, output_path: str) -> Dict[str, Any]:
+def _load_and_validate_input(input_path: str) -> Dict[str, Any]:
     """
-    Main processing pipeline for batch categorization
+    Load and validate input JSON file.
+    
+    Args:
+        input_path: Path to pending_tasks.json
+        
+    Returns:
+        Validated data dict
+        
+    Raises:
+        FileNotFoundError: If input file doesn't exist
+        CategorizationError: If required keys are missing
+    """
+    safe_print(f"\n📖 Reading: {input_path}")
+    
+    if not os.path.exists(input_path):
+        raise FileNotFoundError(f"Input file not found: {input_path}")
+    
+    with open(input_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    # Validate input structure
+    required_keys = ['availableCategories', 'tasks']
+    missing = [k for k in required_keys if k not in data]
+    if missing:
+        raise CategorizationError(f"Missing required keys: {missing}")
+    
+    safe_print(f"📋 Spreadsheet: {data.get('spreadsheetName', 'Unknown')}")
+    safe_print(f"🎯 Categories: {len(data['availableCategories'])}")
+    safe_print(f"📝 Tasks: {len(data['tasks'])}")
+    
+    return data
+
+
+def _process_tasks(
+    categorizer: 'TextExpanderCategorizer',
+    tasks: List[Dict],
+    stats: Dict[str, int],
+    show_progress: bool = True
+) -> List[Dict]:
+    """
+    Process tasks through the categorizer.
+    
+    Args:
+        categorizer: Initialized TextExpanderCategorizer instance
+        tasks: List of task dicts to categorize
+        stats: Stats dict to update (high_confidence, low_confidence, errors)
+        show_progress: Whether to show tqdm progress bar
+        
+    Returns:
+        List of result dicts
+    """
+    results = []
+    total = len(tasks)
+    
+    safe_print(f"\n🔄 Processing {total} items...")
+    
+    # Use tqdm for progress bar (disable for non-interactive or if requested)
+    task_iterator = tqdm(
+        enumerate(tasks, 1),
+        total=total,
+        desc="   🔄 Categorizing",
+        disable=not show_progress,
+        bar_format='{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]'
+    )
+    
+    for idx, task in task_iterator:
+        try:
+            result = categorizer.categorize(
+                task.get('text', ''),
+                task.get('description', '')
+            )
+            
+            results.append({
+                "rowId": task.get('rowId', idx),  # Use idx as fallback if rowId missing
+                "originalText": str(task.get('text', ''))[:100],
+                "suggestedCategory": result['category'],
+                "confidence": round(result['confidence'], 4),
+                "alternatives": result['alternatives'][:2]  # Keep top 2 alternatives
+            })
+            
+            # Track confidence stats using configurable thresholds
+            if result['confidence'] >= HIGH_CONFIDENCE_THRESHOLD:
+                stats["high_confidence"] += 1
+            elif result['confidence'] < LOW_CONFIDENCE_THRESHOLD:
+                stats["low_confidence"] += 1
+                
+        except Exception as e:
+            safe_print(f"⚠️ Error on row {task.get('rowId', '?')}: {e}")
+            stats["errors"] += 1
+            results.append({
+                "rowId": task.get('rowId', idx),  # Use idx as fallback
+                "originalText": str(task.get('text', ''))[:50],
+                "suggestedCategory": "❌ Processing Error",
+                "confidence": 0.0,
+                "alternatives": []
+            })
+    
+    return results
+
+
+def _write_output(
+    output_path: str,
+    results: List[Dict],
+    stats: Dict[str, int],
+    source_spreadsheet_id: str,
+    dry_run: bool = False
+) -> None:
+    """
+    Write results to output file (or preview in dry-run mode).
+    
+    Args:
+        output_path: Path to write results_latest.json
+        results: List of result dicts
+        stats: Stats dict with counts
+        source_spreadsheet_id: Original spreadsheet ID
+        dry_run: If True, only preview without writing
+    """
+    output_data = {
+        "processedAt": datetime.now().isoformat(),
+        "sourceSpreadsheet": source_spreadsheet_id,
+        "totalProcessed": len(results),
+        "stats": {
+            "highConfidence": stats["high_confidence"],
+            "lowConfidence": stats["low_confidence"],
+            "errors": stats["errors"]
+        },
+        "results": results
+    }
+    
+    if dry_run:
+        safe_print(f"\n📋 DRY-RUN: Would write to: {output_path}")
+        safe_print(f"📋 DRY-RUN: Sample results (first 3):")
+        for r in results[:3]:
+            safe_print(f"   • {r['originalText'][:40]}... → {r['suggestedCategory']} ({r['confidence']:.0%})")
+    else:
+        # Ensure output directory exists
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(output_data, f, indent=2, ensure_ascii=False)
+
+
+def _print_summary(
+    stats: Dict[str, int],
+    results: List[Dict],
+    elapsed: float,
+    output_path: str,
+    dry_run: bool = False
+) -> None:
+    """
+    Print processing summary statistics.
+    
+    Args:
+        stats: Stats dict with counts
+        results: List of results for average calculation
+        elapsed: Elapsed time in seconds
+        output_path: Output file path (for display)
+        dry_run: Whether this was a dry run
+    """
+    avg_confidence = sum(r['confidence'] for r in results) / len(results) if results else 0
+    
+    safe_print(f"\n{'='*60}")
+    safe_print("✅ PROCESSING COMPLETE!")
+    safe_print(f"{'='*60}")
+    safe_print(f"📊 Total processed: {stats['total_processed']}")
+    safe_print(f"✅ High confidence (≥60%): {stats['high_confidence']}")
+    safe_print(f"⚠️ Low confidence (<30%): {stats['low_confidence']}")
+    safe_print(f"❌ Errors: {stats['errors']}")
+    safe_print(f"📈 Average confidence: {avg_confidence:.1%}")
+    safe_print(f"⏱️ Time: {elapsed:.2f}s")
+    if dry_run:
+        safe_print(f"📋 DRY-RUN: No files written")
+    else:
+        safe_print(f"💾 Output: {output_path}")
+        safe_print(f"\n🔙 Return to Google Sheet and click '📥 Import Results'")
+
+
+# ============================================================================
+# BATCH PROCESSING - MAIN ORCHESTRATOR
+# ============================================================================
+
+def process_batch(input_path: str, output_path: str, dry_run: bool = False, show_progress: bool = True) -> Dict[str, Any]:
+    """
+    Main processing pipeline for batch categorization.
+    
+    This function orchestrates the categorization workflow by delegating to
+    specialized helper functions for each phase.
     
     Args:
         input_path: Path to pending_tasks.json
         output_path: Path to write results_latest.json
+        dry_run: If True, preview results without writing to file
+        show_progress: If True, show progress indicators
         
     Returns:
         Summary dict with processing stats
@@ -281,112 +528,45 @@ def process_batch(input_path: str, output_path: str) -> Dict[str, Any]:
     }
     
     safe_print(f"\n{'='*60}")
-    safe_print("🌉 DRIVE CATEGORIZER BRIDGE")
+    safe_print("🌉 DRIVE CATEGORIZER BRIDGE" + (" [DRY-RUN]" if dry_run else ""))
     safe_print(f"{'='*60}")
     
     try:
-        # 1️⃣ Read input file
-        safe_print(f"\n📖 Reading: {input_path}")
-        
-        if not os.path.exists(input_path):
-            raise FileNotFoundError(f"Input file not found: {input_path}")
-        
-        with open(input_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        # Validate input structure
-        required_keys = ['availableCategories', 'tasks']
-        missing = [k for k in required_keys if k not in data]
-        if missing:
-            raise CategorizationError(f"Missing required keys: {missing}")
-        
-        safe_print(f"📋 Spreadsheet: {data.get('spreadsheetName', 'Unknown')}")
-        safe_print(f"🎯 Categories: {len(data['availableCategories'])}")
-        safe_print(f"📝 Tasks: {len(data['tasks'])}")
+        # 1️⃣ Load and validate input
+        data = _load_and_validate_input(input_path)
         
         # 2️⃣ Initialize categorizer
         categorizer = TextExpanderCategorizer(data['availableCategories'])
         
-        # 3️⃣ Process each task
-        results = []
-        total = len(data['tasks'])
-        
-        safe_print(f"\n🔄 Processing {total} items...")
-        
-        for idx, task in enumerate(data['tasks'], 1):
-            # Progress indicator
-            if idx % 10 == 0 or idx == total:
-                safe_print(f"   [{idx}/{total}] Processing...")
-            
-            try:
-                result = categorizer.categorize(
-                    task.get('text', ''),
-                    task.get('description', '')
-                )
-                
-                results.append({
-                    "rowId": task.get('rowId', idx),  # Use idx as fallback if rowId missing
-                    "originalText": str(task.get('text', ''))[:100],
-                    "suggestedCategory": result['category'],
-                    "confidence": round(result['confidence'], 4),
-                    "alternatives": result['alternatives'][:2]  # Keep top 2 alternatives
-                })
-                
-                # Track confidence stats using configurable thresholds
-                if result['confidence'] >= HIGH_CONFIDENCE_THRESHOLD:
-                    stats["high_confidence"] += 1
-                elif result['confidence'] < LOW_CONFIDENCE_THRESHOLD:
-                    stats["low_confidence"] += 1
-                    
-            except Exception as e:
-                safe_print(f"⚠️ Error on row {task.get('rowId', '?')}: {e}")
-                stats["errors"] += 1
-                results.append({
-                    "rowId": task.get('rowId', idx),  # Use idx as fallback
-                    "originalText": str(task.get('text', ''))[:50],
-                    "suggestedCategory": "❌ Processing Error",
-                    "confidence": 0.0,
-                    "alternatives": []
-                })
-        
+        # 3️⃣ Process tasks
+        results = _process_tasks(
+            categorizer=categorizer,
+            tasks=data['tasks'],
+            stats=stats,
+            show_progress=show_progress
+        )
         stats["total_processed"] = len(results)
         
-        # 4️⃣ Write output
-        output_data = {
-            "processedAt": datetime.now().isoformat(),
-            "sourceSpreadsheet": data.get('spreadsheetId', ''),
-            "totalProcessed": len(results),
-            "stats": {
-                "highConfidence": stats["high_confidence"],
-                "lowConfidence": stats["low_confidence"],
-                "errors": stats["errors"]
-            },
-            "results": results
-        }
-        
-        # Ensure output directory exists
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(output_data, f, indent=2, ensure_ascii=False)
+        # 4️⃣ Write output (or preview)
+        _write_output(
+            output_path=output_path,
+            results=results,
+            stats=stats,
+            source_spreadsheet_id=data.get('spreadsheetId', ''),
+            dry_run=dry_run
+        )
         
         stats["success"] = True
         
-        # 5️⃣ Summary
+        # 5️⃣ Print summary
         elapsed = (datetime.now() - start_time).total_seconds()
-        avg_confidence = sum(r['confidence'] for r in results) / len(results) if results else 0
-        
-        safe_print(f"\n{'='*60}")
-        safe_print("✅ PROCESSING COMPLETE!")
-        safe_print(f"{'='*60}")
-        safe_print(f"📊 Total processed: {stats['total_processed']}")
-        safe_print(f"✅ High confidence (≥60%): {stats['high_confidence']}")
-        safe_print(f"⚠️ Low confidence (<30%): {stats['low_confidence']}")
-        safe_print(f"❌ Errors: {stats['errors']}")
-        safe_print(f"📈 Average confidence: {avg_confidence:.1%}")
-        safe_print(f"⏱️ Time: {elapsed:.2f}s")
-        safe_print(f"💾 Output: {output_path}")
-        safe_print(f"\n🔙 Return to Google Sheet and click '📥 Import Results'")
+        _print_summary(
+            stats=stats,
+            results=results,
+            elapsed=elapsed,
+            output_path=output_path,
+            dry_run=dry_run
+        )
         
         return stats
         
@@ -394,15 +574,16 @@ def process_batch(input_path: str, output_path: str) -> Dict[str, Any]:
         error_msg = f"❌ Fatal error: {e}"
         safe_print(error_msg)
         
-        # Write error to output file
-        try:
-            with open(output_path, 'w', encoding='utf-8') as f:
-                json.dump({
-                    "error": str(e),
-                    "timestamp": datetime.now().isoformat()
-                }, f, indent=2)
-        except (IOError, OSError) as write_error:
-            safe_print(f"⚠️ Could not write error file: {write_error}")
+        # Write error to output file (unless dry-run)
+        if not dry_run:
+            try:
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    json.dump({
+                        "error": str(e),
+                        "timestamp": datetime.now().isoformat()
+                    }, f, indent=2)
+            except (IOError, OSError) as write_error:
+                safe_print(f"⚠️ Could not write error file: {write_error}")
         
         stats["success"] = False
         return stats
@@ -424,9 +605,13 @@ def mount_drive():
         print(f"❌ Mount error: {e}")
 
 
-def run_categorization():
+def run_categorization(dry_run: bool = False, show_progress: bool = True):
     """
     Main entry point - detect environment and run categorization.
+    
+    Args:
+        dry_run: If True, preview results without writing to file
+        show_progress: If True, show progress indicators
     
     Returns:
         Dict with processing stats, or None if cannot proceed
@@ -451,7 +636,7 @@ def run_categorization():
         safe_print("   Run '🚀 Trigger Categorization' from Google Sheet first.")
         return None
     
-    return process_batch(env["input_file"], env["output_file"])
+    return process_batch(env["input_file"], env["output_file"], dry_run=dry_run, show_progress=show_progress)
 
 
 # ============================================================================
@@ -459,15 +644,21 @@ def run_categorization():
 # ============================================================================
 
 if __name__ == "__main__":
-    print("🌉 DriveCategorizerBridge v1.0")
-    print("=" * 40)
+    args = parse_args()
     
-    # Allow command-line path overrides
-    if len(sys.argv) >= 3:
-        input_file = sys.argv[1]
-        output_file = sys.argv[2]
-        print(f"📥 Custom input: {input_file}")
-        print(f"📤 Custom output: {output_file}")
-        process_batch(input_file, output_file)
+    safe_print("🌉 DriveCategorizerBridge v1.1")
+    safe_print("=" * 40)
+    
+    if args.dry_run:
+        safe_print("📋 Mode: DRY-RUN (no files will be written)")
+    
+    # Use CLI-specified paths or auto-detect
+    if args.input and args.output:
+        safe_print(f"📥 Custom input: {args.input}")
+        safe_print(f"📤 Custom output: {args.output}")
+        process_batch(args.input, args.output, 
+                     dry_run=args.dry_run, 
+                     show_progress=not args.no_progress)
     else:
-        run_categorization()
+        run_categorization(dry_run=args.dry_run, 
+                          show_progress=not args.no_progress)
