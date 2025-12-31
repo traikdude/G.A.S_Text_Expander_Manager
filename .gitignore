@@ -15,3 +15,9 @@ credentials.json
 # Python Cache
 __pycache__/
 *.py[cod]
+
+# GitHub Actions local testing
+.act/
+
+# Clasp credentials (should never be committed)
+.clasprc.json

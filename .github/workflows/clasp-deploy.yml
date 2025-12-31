@@ -1,0 +1,63 @@
+name: 🚀 Clasp Auto-Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  deploy-to-gas:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 📦 Install Dependencies
+        run: |
+          npm ci
+          npm install -g @google/clasp
+
+      - name: 🔐 Configure Clasp Credentials
+        run: |
+          mkdir -p ~/.config/clasp
+          echo '${{ secrets.CLASPRC_JSON }}' > ~/.clasprc.json
+          chmod 600 ~/.clasprc.json
+          
+          # Validate .clasp.json exists
+          if [ ! -f .clasp.json ]; then
+            echo "❌ ERROR: .clasp.json not found in repository root"
+            exit 1
+          fi
+          
+          # Update scriptId from secrets if provided
+          if [ -n "${{ secrets.SCRIPT_ID }}" ]; then
+            jq '.scriptId = "${{ secrets.SCRIPT_ID }}"' .clasp.json > .clasp.json.tmp
+            mv .clasp.json.tmp .clasp.json
+          fi
+
+      - name: 🚀 Push to Google Apps Script
+        run: |
+          clasp push --force
+        env:
+          CLASP_DEPLOYMENT_ID: ${{ secrets.DEPLOYMENT_ID }}
+
+      - name: ✅ Deployment Summary
+        if: success()
+        run: |
+          echo "::notice::✅ Successfully deployed to Google Apps Script"
+          echo "📊 Files pushed: $(ls -1 src/ | wc -l)"
+          echo "🔗 Project: gas-text-expander-manager"
+
+      - name: ❌ Failure Notification
+        if: failure()
+        run: |
+          echo "::error::Deployment failed. Check logs above."
