@@ -515,6 +515,210 @@
     }
 
     /* ========================================================================
+       FEATURE 1: PAGINATION CONTROLS STYLES
+       ======================================================================== */
+    .pagination-controls {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 12px;
+      margin-top: 24px;
+      padding: 16px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      flex-wrap: wrap;
+    }
+
+    .pagination-counter {
+      font-size: 13px;
+      color: #5f6368;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .pagination-current {
+      color: #1a73e8;
+      font-weight: 600;
+    }
+
+    .pagination-total {
+      color: #202124;
+      font-weight: 600;
+    }
+
+    .pagination-controls .btn-small {
+      min-width: fit-content;
+      white-space: nowrap;
+    }
+
+    .pagination-controls .btn-small:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    /* ========================================================================
+       FEATURE 3: GRID/LIST VIEW TOGGLE STYLES
+       ======================================================================== */
+    .view-toggle {
+      display: flex;
+      gap: 4px;
+      background: #f1f3f4;
+      padding: 4px;
+      border-radius: 6px;
+      margin-left: 8px;
+    }
+
+    .view-toggle button {
+      background: transparent;
+      color: #5f6368;
+      transition: all 0.2s;
+      border: none;
+    }
+
+    .view-toggle button.active {
+      background: #1a73e8;
+      color: white;
+      box-shadow: 0 1px 3px rgba(26, 115, 232, 0.3);
+    }
+
+    .view-toggle button:hover:not(.active) {
+      background: #e8eaed;
+      color: #202124;
+    }
+
+    /* List View Mode Styles */
+    .shortcuts-grid.list-view {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .shortcuts-grid.list-view .shortcut-card {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      padding: 12px 16px;
+      gap: 16px;
+    }
+
+    .shortcuts-grid.list-view .shortcut-card-header {
+      min-width: 150px;
+      max-width: 150px;
+      margin-bottom: 0;
+      flex-shrink: 0;
+    }
+
+    .shortcuts-grid.list-view .shortcut-key {
+      font-size: 14px;
+      margin-right: 0;
+    }
+
+    .shortcuts-grid.list-view .shortcut-expansion {
+      flex: 1;
+      max-height: none;
+      -webkit-line-clamp: 1;
+      margin-bottom: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+
+    .shortcuts-grid.list-view .shortcut-meta {
+      margin-top: 0;
+      min-width: 120px;
+      justify-content: flex-end;
+      flex-shrink: 0;
+    }
+
+    .shortcuts-grid.list-view .shortcut-actions {
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+
+    /* ========================================================================
+       FEATURE 4: FONT STYLE FILTER STYLES
+       ======================================================================== */
+    #styleFilters {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    #styleFilters::-webkit-scrollbar {
+      height: 6px;
+    }
+
+    #styleFilters::-webkit-scrollbar-track {
+      background: #f1f3f4;
+      border-radius: 3px;
+    }
+
+    #styleFilters::-webkit-scrollbar-thumb {
+      background: rgba(26, 115, 232, 0.3);
+      border-radius: 3px;
+    }
+
+    #styleFilters::-webkit-scrollbar-thumb:hover {
+      background: rgba(26, 115, 232, 0.5);
+    }
+
+    #styleFilters .chip {
+      font-family: 'Segoe UI', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+      white-space: nowrap;
+      min-width: fit-content;
+      flex-shrink: 0;
+    }
+
+    #styleFilters .chip[data-filter="kaomoji"],
+    #styleFilters .chip[data-filter="emoticons"] {
+      background: #fff3e0;
+      color: #f57c00;
+    }
+
+    #styleFilters .chip[data-filter="kaomoji"]:hover,
+    #styleFilters .chip[data-filter="emoticons"]:hover {
+      background: #ffe0b2;
+    }
+
+    #styleFilters .chip[data-filter="kaomoji"].active,
+    #styleFilters .chip[data-filter="emoticons"].active {
+      background: #f57c00;
+      color: white;
+    }
+
+    #styleFilters .chip[data-filter="multiline"],
+    #styleFilters .chip[data-filter="multi-line"] {
+      background: #e1f5fe;
+      color: #0277bd;
+    }
+
+    #styleFilters .chip[data-filter="multiline"]:hover,
+    #styleFilters .chip[data-filter="multi-line"]:hover {
+      background: #b3e5fc;
+    }
+
+    #styleFilters .chip[data-filter="multiline"].active,
+    #styleFilters .chip[data-filter="multi-line"].active {
+      background: #0277bd;
+      color: white;
+    }
+
+    #styleFilters .chip[data-filter="bold"] {
+      font-weight: 700;
+    }
+
+    #styleFilters .chip[data-filter="italic"] {
+      font-style: italic;
+    }
+
+
+    /* ========================================================================
        EMPTY STATE
        ======================================================================== */
     .empty-state {
@@ -1089,6 +1293,59 @@
 
       /* NOTE: Alternative approach - filters start EXPANDED on mobile
          Remove .collapsed class from initial HTML if user prefers this */
+
+      /* FEATURE 1: Mobile responsive pagination */
+      .pagination-controls {
+        gap: 8px;
+        padding: 12px;
+      }
+
+      .pagination-controls .btn-small {
+        padding: 6px 10px;
+        font-size: 11px;
+      }
+
+      .pagination-counter {
+        font-size: 12px;
+        width: 100%;
+        text-align: center;
+        order: -1;
+      }
+
+      /* FEATURE 3: Mobile view toggle adjustments */
+      .view-toggle {
+        width: 100%;
+        margin-top: 8px;
+        margin-left: 0;
+      }
+
+      .view-toggle button {
+        flex: 1;
+        justify-content: center;
+      }
+
+      .shortcuts-grid.list-view .shortcut-card {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .shortcuts-grid.list-view .shortcut-card-header,
+      .shortcuts-grid.list-view .shortcut-meta {
+        min-width: unset;
+        max-width: unset;
+        width: 100%;
+      }
+
+      /* FEATURE 4: Mobile style filter horizontal scrolling */
+      #styleFilters {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+      }
+
+      #styleFilters .chip {
+        font-size: 11px;
+        padding: 5px 10px;
+      }
     }
   </style>
 </head>
@@ -1117,6 +1374,18 @@
         <button id="btnNew" onclick="openNewShortcutModal()">
           ➕ New / Edit
         </button>
+
+        <!-- FEATURE 3: VIEW TOGGLE -->
+        <div class="view-toggle" role="group" aria-label="View mode toggle">
+          <button id="btnGridView" class="btn-small active" onclick="setViewMode('grid')" title="Grid View"
+            aria-label="Switch to grid view" aria-pressed="true">
+            🔲 Grid
+          </button>
+          <button id="btnListView" class="btn-small" onclick="setViewMode('list')" title="List View"
+            aria-label="Switch to list view" aria-pressed="false">
+            📋 List
+          </button>
+        </div>
       </div>
     </div>
 
@@ -1175,6 +1444,17 @@
             <div class="chip lang-english" data-filter="english" data-filter-type="language">🇺🇸 English</div>
           </div>
 
+          <!-- FEATURE 4: FONT STYLE FILTER -->
+          <div class="filter-chips" id="styleFilters" style="margin-top: 8px;" role="group"
+            aria-label="Filter by font style">
+            <span class="filter-label" id="styleFilterLabel">Style:</span>
+            <div class="chip active" data-filter="all" data-filter-type="style" onclick="setStyleFilter('all')"
+              role="button" tabindex="0" aria-label="All styles" aria-pressed="true">
+              ✨ All Styles
+            </div>
+            <!-- Additional chips generated dynamically by renderStyleFilters() -->
+          </div>
+
           <!-- Type/Category Filter Chips (based on description field) -->
           <div class="filter-chips" id="typeFilters" style="margin-top: 8px;">
             <span class="filter-label">Type:</span>
@@ -1199,6 +1479,32 @@
       <!-- Shortcuts Grid -->
       <div class="shortcuts-grid" id="shortcutsGrid">
         <!-- Cards will be dynamically inserted here -->
+      </div>
+
+      <!-- FEATURE 1: PAGINATION CONTROLS -->
+      <div class="pagination-controls" id="paginationControls" style="display: none;">
+        <button id="btnFirstPage" class="btn-small" onclick="goToPage(1)" title="First Page"
+          aria-label="Go to first page">
+          ⏮️
+        </button>
+        <button id="btnPrevPage" class="btn-small" onclick="goToPage(currentPage - 1)" title="Previous Page"
+          aria-label="Go to previous page">
+          ◀️ Prev
+        </button>
+
+        <span class="pagination-counter" aria-live="polite">
+          Page <span id="currentPageNum" class="pagination-current">1</span> of
+          <span id="totalPagesNum" class="pagination-total">1</span>
+        </span>
+
+        <button id="btnNextPage" class="btn-small" onclick="goToPage(currentPage + 1)" title="Next Page"
+          aria-label="Go to next page">
+          Next ▶️
+        </button>
+        <button id="btnLastPage" class="btn-small" onclick="goToPage(totalPages)" title="Last Page"
+          aria-label="Go to last page">
+          ⏭️
+        </button>
       </div>
 
       <!-- Empty State -->
@@ -1390,6 +1696,62 @@
       BATCH_SIZE: 1000,
       RENDER_CHUNK_SIZE: 50, // Items to render per frame
       DEBUG: true
+    };
+
+    // ========================================================================
+    // FEATURE 1-4: ADDITIONAL GLOBAL STATE VARIABLES
+    // ========================================================================
+
+    // --- FEATURE 1: PAGINATION --- //
+    let currentPage = 1;
+    const ITEMS_PER_PAGE = 50;
+    let totalPages = 1;
+    let filteredShortcuts = []; // Store filtered results globally
+
+    // --- FEATURE 2: MEMOIZATION CACHE --- //
+    let filterCache = {
+      key: '',
+      results: [],
+      timestamp: 0,
+      hits: 0,
+      misses: 0
+    };
+
+    // --- FEATURE 3: VIEW MODE --- //
+    let viewMode = 'grid'; // 'grid' | 'list'
+
+    // --- FEATURE 4: STYLE FILTER --- //
+    let activeStyleFilter = 'all'; // Default: show all styles
+
+    // Font style definitions (with Unicode examples)
+    const FONT_STYLES = {
+      'all': 'All Styles',
+      'bold': '𝐁𝐨𝐥𝐝',
+      'italic': '𝐼𝑡𝑎𝑙𝑖𝑐',
+      'bold-italic': '𝑩𝒐𝒍𝒅 𝑰𝒕𝒂𝒍𝒊𝒄',
+      'script': '𝒮𝒸𝓇𝒾𝓅𝓉',
+      'bold-script': '𝓑𝓸𝓵𝓭 𝓢𝓬𝓻𝓲𝓹𝓽',
+      'fraktur': '𝔉𝔯𝔞𝔨𝔱𝔲𝔯',
+      'bold-fraktur': '𝕱𝖗𝖆𝖐𝖙𝖚𝖗',
+      'monospace': '𝙼𝚘𝚗𝚘𝚜𝚙𝚊𝚌𝚎',
+      'double-struck': '𝔻𝕠𝕦𝕓𝕝𝕖',
+      'sans-serif': '𝖲𝖺𝗇𝗌',
+      'sans-serif-bold': '𝗦𝗮𝗻𝘀 𝗕𝗼𝗹𝗱',
+      'sans-serif-italic': '𝘚𝘢𝘯𝘀 𝘐𝘵𝘢𝘭𝘪𝘤',
+      'sans-serif-bold-italic': '𝙎𝙖𝙣𝙨 𝘽𝙤𝙡𝙙 𝙄𝙩𝙖𝙡𝙞𝙘',
+      'circled': 'Ⓒⓘⓡⓒⓛⓔⓓ',
+      'squared': '🅂🅀🅄🄰🅁🄴🄳',
+      'negative-squared': '🅽🅴🅶🅰🆃🅸🆅🅴',
+      'parenthesized': '⒫⒜⒭⒠⒩⒯⒣',
+      'fullwidth': 'Ｆｕｌｌｗｉｄｔｈ',
+      'upside-down': 'uʍop-ǝpᴉsd∩',
+      'smallcaps': 'sᴍᴀʟʟᴄᴀᴘs',
+      'subscript': 'ₛᵤᵦₛ꜀ᵣᵢₚₜ',
+      'superscript': 'ˢᵘᵖᵉʳˢᶜʳⁱᵖᵗ',
+      'kaomoji': '(╯°□°)╯ Kaomoji',
+      'emoticons': '(◕‿◕) Emoticons',
+      'multiline': '📝 Multiline',
+      'multi-line': '📝 Multi-line'
     };
 
     // ========================================================================
@@ -1590,6 +1952,161 @@
     // ========================================================================
     // DYNAMIC CATEGORY SYSTEM (v9.0)
     // ========================================================================
+
+    // ========================================================================
+    // FEATURE 1: PAGINATION FUNCTIONS
+    // ========================================================================
+
+    function goToPage(page) {
+      totalPages = Math.ceil((filteredShortcuts?.length || 0) / ITEMS_PER_PAGE);
+      if (page < 1 || page > totalPages || page === currentPage) return;
+      currentPage = page;
+      renderImmediate();
+      updatePaginationUI();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function updatePaginationUI() {
+      totalPages = Math.ceil((filteredShortcuts?.length || 0) / ITEMS_PER_PAGE);
+      const currentPageNum = el('currentPageNum');
+      const totalPagesNum = el('totalPagesNum');
+      if (currentPageNum) currentPageNum.textContent = currentPage;
+      if (totalPagesNum) totalPagesNum.textContent = totalPages;
+      const btnFirst = el('btnFirstPage');
+      const btnPrev = el('btnPrevPage');
+      const btnNext = el('btnNextPage');
+      const btnLast = el('btnLastPage');
+      if (btnFirst) btnFirst.disabled = currentPage === 1;
+      if (btnPrev) btnPrev.disabled = currentPage === 1;
+      if (btnNext) btnNext.disabled = currentPage >= totalPages;
+      if (btnLast) btnLast.disabled = currentPage >= totalPages;
+      const paginationControls = el('paginationControls');
+      if (paginationControls) paginationControls.style.display = totalPages <= 1 ? 'none' : 'flex';
+    }
+
+    // ========================================================================
+    // FEATURE 2: FILTER MEMOIZATION CACHE FUNCTIONS
+    // ========================================================================
+
+    function filterShortcutsMemoized(shortcuts, searchQuery, langFilter, typeFilter, categoryFilter, styleFilter) {
+      const cacheKey = `${searchQuery}|${langFilter}|${typeFilter}|${categoryFilter}|${styleFilter}`;
+      if (filterCache.key === cacheKey) {
+        filterCache.hits++;
+        console.debug(`🎯 Cache HIT #${filterCache.hits}`);
+        return filterCache.results;
+      }
+      console.debug(`⚡ Cache MISS - Filtering ${shortcuts.length} items...`);
+      const startTime = performance.now();
+      const filtered = shortcuts.filter(item => {
+        const matchesSearch = !searchQuery ||
+          (item.name && item.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+          (item.content && item.content.toLowerCase().includes(searchQuery.toLowerCase())) ||
+          (item.tags && item.tags.toLowerCase().includes(searchQuery.toLowerCase())) ||
+          (item.language && item.language.toLowerCase().includes(searchQuery.toLowerCase())) ||
+          (item.app && item.app.toLowerCase().includes(searchQuery.toLowerCase())) ||
+          (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()));
+        const matchesLang = langFilter === 'all' || item.language === langFilter;
+        const matchesType = typeFilter === 'all' || item.type === typeFilter;
+        const matchesCat = categoryFilter === 'all' || item.category === categoryFilter;
+        const matchesStyle = styleFilter === 'all' || item.style === styleFilter;
+        return matchesSearch && matchesLang && matchesType && matchesCat && matchesStyle;
+      });
+      const elapsed = performance.now() - startTime;
+      console.debug(`✅ Filtered in ${elapsed.toFixed(2)}ms - ${filtered.length} results`);
+      filterCache = { key: cacheKey, results: filtered, timestamp: Date.now(), hits: filterCache.hits, misses: filterCache.misses + 1 };
+      return filtered;
+    }
+
+    function invalidateFilterCache() {
+      filterCache = { key: '', results: [], timestamp: 0, hits: 0, misses: 0 };
+      console.debug('🗑️ Filter cache cleared');
+    }
+
+    // ========================================================================
+    // FEATURE 3: GRID/LIST VIEW TOGGLE FUNCTIONS
+    // ========================================================================
+
+    function setViewMode(mode) {
+      if (mode !== 'grid' && mode !== 'list') return;
+      viewMode = mode;
+      localStorage.setItem('viewMode', mode);
+      applyViewMode();
+      const modeLabel = mode === 'grid' ? '🔲 Grid' : '📋 List';
+      toast(`View mode: ${modeLabel}`, 'good');
+    }
+
+    function initViewMode() {
+      const saved = localStorage.getItem('viewMode');
+      if (saved && (saved === 'grid' || saved === 'list')) viewMode = saved;
+      applyViewMode();
+    }
+
+    function applyViewMode() {
+      const grid = el('shortcutsGrid');
+      const btnGrid = el('btnGridView');
+      const btnList = el('btnListView');
+      if (!grid) return;
+      if (viewMode === 'list') {
+        grid.classList.add('list-view');
+        if (btnList) { btnList.classList.add('active'); btnList.setAttribute('aria-pressed', 'true'); }
+        if (btnGrid) { btnGrid.classList.remove('active'); btnGrid.setAttribute('aria-pressed', 'false'); }
+      } else {
+        grid.classList.remove('list-view');
+        if (btnGrid) { btnGrid.classList.add('active'); btnGrid.setAttribute('aria-pressed', 'true'); }
+        if (btnList) { btnList.classList.remove('active'); btnList.setAttribute('aria-pressed', 'false'); }
+      }
+    }
+
+    // ========================================================================
+    // FEATURE 4: FONT STYLE FILTER FUNCTIONS
+    // ========================================================================
+
+    function setStyleFilter(style) {
+      if (activeStyleFilter === style) return;
+      activeStyleFilter = style;
+      currentPage = 1;
+      renderImmediate();
+      updateStyleChipsUI();
+      const styleName = style === 'all' ? 'All Styles' : (FONT_STYLES[style] || style);
+      toast(`Filter: ${styleName}`, 'good');
+    }
+
+    function updateStyleChipsUI() {
+      const chips = document.querySelectorAll('#styleFilters .chip');
+      chips.forEach(chip => {
+        const filterValue = chip.getAttribute('data-filter');
+        if (filterValue === activeStyleFilter) {
+          chip.classList.add('active');
+          chip.setAttribute('aria-pressed', 'true');
+        } else {
+          chip.classList.remove('active');
+          chip.setAttribute('aria-pressed', 'false');
+        }
+      });
+    }
+
+    function renderStyleFilters() {
+      const container = el('styleFilters');
+      if (!container) return;
+      const hasStyleProperty = state.shortcuts && state.shortcuts.some(s => s.style);
+      if (!hasStyleProperty) {
+        container.style.display = 'none';
+        console.warn('⚠️ No style property found in shortcuts data.');
+        return;
+      }
+      const uniqueStyles = new Set();
+      state.shortcuts.forEach(shortcut => { if (shortcut.style) uniqueStyles.add(shortcut.style); });
+      const styles = Array.from(uniqueStyles).sort();
+      let chipsHTML = '<span class="filter-label">Style:</span>';
+      chipsHTML += '<div class="chip active" data-filter="all" data-filter-type="style" onclick="setStyleFilter(\'all\')" role="button" tabindex="0">✨ All Styles</div>';
+      styles.forEach(style => {
+        let displayName = FONT_STYLES[style] ? FONT_STYLES[style].split('(')[0].trim() : style.charAt(0).toUpperCase() + style.slice(1).replace(/-/g, ' ');
+        chipsHTML += `<div class="chip" data-filter="${escapeHtml(style)}" data-filter-type="style" onclick="setStyleFilter('${escapeHtml(style)}')" role="button" tabindex="0">${escapeHtml(displayName)}</div>`;
+      });
+      container.innerHTML = chipsHTML;
+      container.style.display = 'flex';
+      console.log(`✅ Rendered ${styles.length} style filters`);
+    }
 
     /**
      * Renders dynamic category filter chips based on loaded data
