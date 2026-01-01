@@ -39,7 +39,17 @@ const CFG = {
   MAX_DESC_LEN: 2000,
   INITIAL_PAGE_SIZE: 200, // Reduced further - 1000 exceeded callback payload limit (2025-12-23)
   DEBUG_MODE: true,
-  SNAPSHOT_TTL_SECONDS: 60 * 5 // 5 min snapshot cache
+  // 5 min snapshot cache
+  PYTHON_URLS: {
+    ML_CATEGORIZER: 'https://colab.research.google.com/drive/1TLiyh7GDo6XZMU4B5vN39fIUWpGhzG6h?usp=sharing',
+    DATA_QUALITY: 'https://colab.research.google.com/drive/PLACEHOLDER_DATA_QUALITY',
+    DUPLICATE_FINDER: 'https://colab.research.google.com/drive/PLACEHOLDER_DUPLICATE_FINDER',
+    ANALYTICS: 'https://colab.research.google.com/drive/PLACEHOLDER_ANALYTICS',
+    BACKUP_SYSTEM: 'https://colab.research.google.com/drive/PLACEHOLDER_BACKUP_SYSTEM',
+    DRIVE_BRIDGE: 'https://colab.research.google.com/drive/PLACEHOLDER_DRIVE_BRIDGE',
+    FONT_CATEGORIZER: 'https://colab.research.google.com/drive/PLACEHOLDER_FONT_CATEGORIZER',
+    FOLDER: 'https://drive.google.com/drive/u/0/my-drive' // Defaults to Drive root, user can update
+  }
 };
 
 const HEADERS_SHORTCUTS = [
@@ -151,6 +161,19 @@ function onOpen(e) {
     .addItem('🚀 Open Manager (Sidebar)', 'openManagerSidebar')
     .addItem('🖼️ Open Manager (Dialog)', 'openManagerDialog')
     .addSeparator()
+    .addSubMenu(ui.createMenu('🐍 Python Tools (Colab)')
+      .addItem('🧠 Run ML Categorizer', 'openMLCategorizer')
+      .addItem('🛡️ Run Data Quality Check', 'openDataQuality')
+      .addItem('👯 Run Duplicate Finder', 'openDuplicateFinder')
+      .addItem('📊 Run Analytics', 'openAnalytics')
+      .addSeparator()
+      .addItem('💾 Run Backup System', 'openBackupSystem')
+      .addItem('🌉 Run Drive Bridge', 'openDriveBridge')
+      .addItem('✨ Run Font Categorizer', 'openFontCategorizer')
+      .addSeparator()
+      .addItem('📂 Open Tools Folder', 'openToolsFolder')
+    )
+    .addSeparator()
     .addItem('🌐 Open Web App (New Tab)', 'openWebAppLinkDialog')
     .addSeparator()
     .addSubMenu(ui.createMenu('📁 Organize Sheets')
@@ -258,6 +281,38 @@ function doGet(e) {
  */
 function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
+}
+
+// ============================================================================ 
+// PYTHON TOOLS LAUNCHERS
+// ============================================================================ 
+
+function openMLCategorizer() { openUrl_(CFG.PYTHON_URLS.ML_CATEGORIZER, 'ML Categorizer'); }
+function openDataQuality() { openUrl_(CFG.PYTHON_URLS.DATA_QUALITY, 'Data Quality Check'); }
+function openDuplicateFinder() { openUrl_(CFG.PYTHON_URLS.DUPLICATE_FINDER, 'Duplicate Finder'); }
+function openAnalytics() { openUrl_(CFG.PYTHON_URLS.ANALYTICS, 'Analytics Dashboard'); }
+function openBackupSystem() { openUrl_(CFG.PYTHON_URLS.BACKUP_SYSTEM, 'Backup System'); }
+function openDriveBridge() { openUrl_(CFG.PYTHON_URLS.DRIVE_BRIDGE, 'Drive Bridge Worker'); }
+function openFontCategorizer() { openUrl_(CFG.PYTHON_URLS.FONT_CATEGORIZER, 'Font Categorizer'); }
+function openToolsFolder() { openUrl_(CFG.PYTHON_URLS.FOLDER, 'Python Tools Folder'); }
+
+/**
+ * Helper to open a URL in a new ta b.
+ */
+function openUrl_(url, title) {
+  const html = HtmlService.createHtmlOutput(
+    `<html>
+      <script>
+        window.open('${url}', '_blank');
+        google.script.host.close();
+      </script>
+      <body style="font-family: sans-serif; padding: 20px;">
+        <h3>Opening ${title}...</h3>
+        <p>If the tab didn't open, <a href="${url}" target="_blank">click here</a>.</p>
+      </body>
+    </html>`
+  ).setWidth(400).setHeight(150);
+  SpreadsheetApp.getUi().showModalDialog(html, title);
 }
 
 // ============================================================================ 
