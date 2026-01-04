@@ -1,0 +1,106 @@
+name: Run Python Analysis Tools
+
+on:
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      tool:
+        description: 'Which tool to run?'
+        required: true
+        type: choice
+        options:
+          - MLCategorizer
+          - DataQualityAnalyzer
+          - DuplicateFinder
+          - AnalyticsDashboard
+          - BackupSystem
+          - DriveCategorizerBridge
+          - FontAwareCategorizer
+          - All
+  
+  # Scheduled runs (every Monday at 9 AM UTC)
+  schedule:
+    - cron: '0 9 * * 1'
+
+jobs:
+  run-tool:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          cd tools
+          pip install -r requirements.txt
+      
+      - name: Set up Google credentials
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          echo "$GOOGLE_CREDENTIALS" > /tmp/google_credentials.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/google_credentials.json" >> $GITHUB_ENV
+      
+      - name: Run ML Categorizer
+        if: github.event.inputs.tool == 'MLCategorizer' || github.event.inputs.tool == 'All' || github.event_name == 'schedule'
+        run: |
+          cd tools
+          python MLCategorizer.py
+      
+      - name: Run Data Quality Analyzer
+        if: github.event.inputs.tool == 'DataQualityAnalyzer' || github.event.inputs.tool == 'All' || github.event_name == 'schedule'
+        run: |
+          cd tools
+          python DataQualityAnalyzer.py
+      
+      - name: Run Duplicate Finder
+        if: github.event.inputs.tool == 'DuplicateFinder' || github.event.inputs.tool == 'All'
+        run: |
+          cd tools
+          python DuplicateFinder.py
+      
+      - name: Run Analytics Dashboard
+        if: github.event.inputs.tool == 'AnalyticsDashboard' || github.event.inputs.tool == 'All'
+        run: |
+          cd tools
+          python AnalyticsDashboard.py
+      
+      - name: Run Backup System
+        if: github.event.inputs.tool == 'BackupSystem' || github.event.inputs.tool == 'All' || github.event_name == 'schedule'
+        run: |
+          cd tools
+          python BackupSystem.py
+      
+      - name: Run Drive Categorizer Bridge
+        if: github.event.inputs.tool == 'DriveCategorizerBridge' || github.event.inputs.tool == 'All'
+        run: |
+          cd tools
+          python DriveCategorizerBridge.py
+      
+      - name: Run Font Aware Categorizer
+        if: github.event.inputs.tool == 'FontAwareCategorizer' || github.event.inputs.tool == 'All'
+        run: |
+          cd tools
+          python FontAwareCategorizer.py
+      
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: analysis-results-${{ github.run_number }}
+          path: |
+            tools/*.csv
+            tools/*.json
+            tools/*.log
+          retention-days: 30
+      
+      - name: Clean up credentials
+        if: always()
+        run: rm -f /tmp/google_credentials.json

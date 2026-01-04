@@ -41,13 +41,13 @@ const CFG = {
   DEBUG_MODE: true,
   // 5 min snapshot cache
   PYTHON_URLS: {
-    ML_CATEGORIZER: 'https://colab.research.google.com/drive/1TLiyh7GDo6XZMU4B5vN39fIUWpGhzG6h?usp=sharing',
-    DATA_QUALITY: 'https://colab.research.google.com/drive/PLACEHOLDER_DATA_QUALITY',
-    DUPLICATE_FINDER: 'https://colab.research.google.com/drive/PLACEHOLDER_DUPLICATE_FINDER',
-    ANALYTICS: 'https://colab.research.google.com/drive/PLACEHOLDER_ANALYTICS',
-    BACKUP_SYSTEM: 'https://colab.research.google.com/drive/PLACEHOLDER_BACKUP_SYSTEM',
-    DRIVE_BRIDGE: 'https://colab.research.google.com/drive/PLACEHOLDER_DRIVE_BRIDGE',
-    FONT_CATEGORIZER: 'https://colab.research.google.com/drive/PLACEHOLDER_FONT_CATEGORIZER',
+    ML_CATEGORIZER: 'https://colab.research.google.com/drive/1gG6TwDR7wogtzeV-Z-SQfZxfNlBcLToC?usp=sharing',
+    DATA_QUALITY: 'https://colab.research.google.com/drive/1dcfwzJSNhWY2xh9ftANQQ1MOI3tgICVT?usp=sharing',
+    DUPLICATE_FINDER: 'https://colab.research.google.com/drive/1x9ljqEGxY1_d1RqaTw2WqyfH4V83VFCN?usp=sharing',
+    ANALYTICS: 'https://colab.research.google.com/drive/1rUKDdCSTkaCou8M6pZ8mOxpqxMlaFwSZ?usp=sharing',
+    BACKUP_SYSTEM: 'https://colab.research.google.com/drive/1jsghzOBMRni3bVVuIVt3LJYiT3a-dcx-?usp=sharing',
+    DRIVE_BRIDGE: 'https://colab.research.google.com/drive/15Es7RpxPDUB2H6_-ZZcDogXOe9PqbHh8?usp=sharing',
+    FONT_CATEGORIZER: 'https://colab.research.google.com/drive/1-znKUVltpqwflWALgDkAqX12ZnDX-68F?usp=sharing',
     FOLDER: 'https://drive.google.com/drive/u/0/my-drive' // Defaults to Drive root, user can update
   }
 };
