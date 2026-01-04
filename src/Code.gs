@@ -41,13 +41,13 @@ const CFG = {
   DEBUG_MODE: true,
   // 5 min snapshot cache
   PYTHON_URLS: {
-    ML_CATEGORIZER: 'https://colab.research.google.com/drive/1gG6TwDR7wogtzeV-Z-SQfZxfNlBcLToC?usp=sharing',
-    DATA_QUALITY: 'https://colab.research.google.com/drive/1dcfwzJSNhWY2xh9ftANQQ1MOI3tgICVT?usp=sharing',
-    DUPLICATE_FINDER: 'https://colab.research.google.com/drive/1x9ljqEGxY1_d1RqaTw2WqyfH4V83VFCN?usp=sharing',
-    ANALYTICS: 'https://colab.research.google.com/drive/1rUKDdCSTkaCou8M6pZ8mOxpqxMlaFwSZ?usp=sharing',
-    BACKUP_SYSTEM: 'https://colab.research.google.com/drive/1jsghzOBMRni3bVVuIVt3LJYiT3a-dcx-?usp=sharing',
-    DRIVE_BRIDGE: 'https://colab.research.google.com/drive/15Es7RpxPDUB2H6_-ZZcDogXOe9PqbHh8?usp=sharing',
-    FONT_CATEGORIZER: 'https://colab.research.google.com/drive/1-znKUVltpqwflWALgDkAqX12ZnDX-68F?usp=sharing',
+    ML_CATEGORIZER: 'https://colab.research.google.com/github/traikdude/G.A.S_Text_Expander_Manager/blob/master/notebooks/MLCategorizer.ipynb',
+    DATA_QUALITY: 'https://colab.research.google.com/github/traikdude/G.A.S_Text_Expander_Manager/blob/master/notebooks/DataQualityAnalyzer.ipynb',
+    DUPLICATE_FINDER: 'https://colab.research.google.com/github/traikdude/G.A.S_Text_Expander_Manager/blob/master/notebooks/DuplicateFinder.ipynb',
+    ANALYTICS: 'https://colab.research.google.com/github/traikdude/G.A.S_Text_Expander_Manager/blob/master/notebooks/AnalyticsDashboard.ipynb',
+    BACKUP_SYSTEM: 'https://colab.research.google.com/github/traikdude/G.A.S_Text_Expander_Manager/blob/master/notebooks/BackupSystem.ipynb',
+    DRIVE_BRIDGE: 'https://colab.research.google.com/github/traikdude/G.A.S_Text_Expander_Manager/blob/master/notebooks/DriveCategorizerBridge.ipynb',
+    FONT_CATEGORIZER: 'https://colab.research.google.com/github/traikdude/G.A.S_Text_Expander_Manager/blob/master/notebooks/FontAwareCategorizer.ipynb',
     FOLDER: 'https://drive.google.com/drive/u/0/my-drive' // Defaults to Drive root, user can update
   }
 };

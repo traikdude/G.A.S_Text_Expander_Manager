@@ -10,6 +10,8 @@ Thumbs.db
 
 # Secrets
 credentials.json
+gas-tem-*.json
+*service-account*.json
 .gemini/
 
 # Python Cache
