@@ -1988,6 +1988,7 @@
     // FEATURE 2: FILTER MEMOIZATION CACHE FUNCTIONS
     // ========================================================================
 
+    // ✅ FIX C: Use canonical field names matching createShortcutCard data model
     function filterShortcutsMemoized(shortcuts, searchQuery, langFilter, typeFilter, categoryFilter, styleFilter) {
       const cacheKey = `${searchQuery}|${langFilter}|${typeFilter}|${categoryFilter}|${styleFilter}`;
       if (filterCache.key === cacheKey) {
@@ -1998,17 +1999,20 @@
       console.debug(`⚡ Cache MISS - Filtering ${shortcuts.length} items...`);
       const startTime = performance.now();
       const filtered = shortcuts.filter(item => {
+        // ✅ FIX C: Use canonical field names: key, expansion, application, mainCategory, fontStyle
         const matchesSearch = !searchQuery ||
-          (item.name && item.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-          (item.content && item.content.toLowerCase().includes(searchQuery.toLowerCase())) ||
+          (item.key && item.key.toLowerCase().includes(searchQuery.toLowerCase())) ||
+          (item.expansion && item.expansion.toLowerCase().includes(searchQuery.toLowerCase())) ||
           (item.tags && item.tags.toLowerCase().includes(searchQuery.toLowerCase())) ||
           (item.language && item.language.toLowerCase().includes(searchQuery.toLowerCase())) ||
-          (item.app && item.app.toLowerCase().includes(searchQuery.toLowerCase())) ||
-          (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()));
-        const matchesLang = langFilter === 'all' || item.language === langFilter;
-        const matchesType = typeFilter === 'all' || item.type === typeFilter;
-        const matchesCat = categoryFilter === 'all' || item.category === categoryFilter;
-        const matchesStyle = styleFilter === 'all' || item.style === styleFilter;
+          (item.application && item.application.toLowerCase().includes(searchQuery.toLowerCase())) ||
+          (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
+          (item.mainCategory && item.mainCategory.toLowerCase().includes(searchQuery.toLowerCase())) ||
+          (item.fontStyle && item.fontStyle.toLowerCase().includes(searchQuery.toLowerCase()));
+        const matchesLang = langFilter === 'all' || (item.language || '').toLowerCase() === langFilter.toLowerCase();
+        const matchesType = typeFilter === 'all' || (item.description || '').toLowerCase().includes(typeFilter.toLowerCase());
+        const matchesCat = categoryFilter === 'all' || (item.mainCategory || '') === categoryFilter;
+        const matchesStyle = styleFilter === 'all' || (item.fontStyle || '').toLowerCase() === styleFilter.toLowerCase();
         return matchesSearch && matchesLang && matchesType && matchesCat && matchesStyle;
       });
       const elapsed = performance.now() - startTime;
@@ -2085,23 +2089,26 @@
       });
     }
 
+    // ✅ FIX B: Use fontStyle field (canonical name) instead of style
     function renderStyleFilters() {
       const container = el('styleFilters');
       if (!container) return;
-      const hasStyleProperty = state.shortcuts && state.shortcuts.some(s => s.style);
+      // Check for fontStyle field (canonical name from DropdownEnhancements)
+      const hasStyleProperty = state.shortcuts && state.shortcuts.some(s => s.fontStyle);
       if (!hasStyleProperty) {
         container.style.display = 'none';
-        console.warn('⚠️ No style property found in shortcuts data.');
+        if (CONFIG.DEBUG) console.log('ℹ️ No fontStyle property found in shortcuts data (style filter hidden).');
         return;
       }
       const uniqueStyles = new Set();
-      state.shortcuts.forEach(shortcut => { if (shortcut.style) uniqueStyles.add(shortcut.style); });
+      state.shortcuts.forEach(shortcut => { if (shortcut.fontStyle) uniqueStyles.add(shortcut.fontStyle); });
       const styles = Array.from(uniqueStyles).sort();
       let chipsHTML = '<span class="filter-label">Style:</span>';
-      chipsHTML += '<div class="chip active" data-filter="all" data-filter-type="style" onclick="setStyleFilter(\'all\')" role="button" tabindex="0">✨ All Styles</div>';
+      chipsHTML += `<div class="chip ${activeStyleFilter === 'all' ? 'active' : ''}" data-filter="all" data-filter-type="style" role="button" tabindex="0">✨ All Styles</div>`;
       styles.forEach(style => {
-        let displayName = FONT_STYLES[style] ? FONT_STYLES[style].split('(')[0].trim() : style.charAt(0).toUpperCase() + style.slice(1).replace(/-/g, ' ');
-        chipsHTML += `<div class="chip" data-filter="${escapeHtml(style)}" data-filter-type="style" onclick="setStyleFilter('${escapeHtml(style)}')" role="button" tabindex="0">${escapeHtml(displayName)}</div>`;
+        const isActive = activeStyleFilter === style ? 'active' : '';
+        let displayName = FONT_STYLES[style.toLowerCase()] ? FONT_STYLES[style.toLowerCase()].split('(')[0].trim() : style.charAt(0).toUpperCase() + style.slice(1).replace(/-/g, ' ');
+        chipsHTML += `<div class="chip ${isActive}" data-filter="${escapeHtml(style)}" data-filter-type="style" role="button" tabindex="0">${escapeHtml(displayName)}</div>`;
       });
       container.innerHTML = chipsHTML;
       container.style.display = 'flex';
@@ -2722,25 +2729,41 @@
         renderAnimationFrameId = null;
       }
 
-      renderFavoritesGrid(); // Favorites are few, render instantly
-      updateEmptyStates();
+      // ✅ FIX A: Compute filtered set ONCE, then apply pagination
+      filteredShortcuts = getFilteredShortcuts();
 
-      // Start chunked render for main grid
-      startChunkedRender();
+      // Pagination math
+      totalPages = Math.max(1, Math.ceil(filteredShortcuts.length / ITEMS_PER_PAGE));
+      if (currentPage > totalPages) currentPage = totalPages;
+      if (currentPage < 1) currentPage = 1;
+
+      const start = (currentPage - 1) * ITEMS_PER_PAGE;
+      const pageItems = filteredShortcuts.slice(start, start + ITEMS_PER_PAGE);
+
+      // Render using paged list
+      renderFavoritesGrid();
+      updateEmptyStatesWithList_(pageItems);
+      startChunkedRender(pageItems);
+
+      // Update pagination controls
+      updatePaginationUI();
+      updateFilterCount();
+
+      setTimeout(syncTopBarHeight, 0);
     }
 
-    function startChunkedRender() {
+    function startChunkedRender(items) {
       const grid = el('shortcutsGrid');
-      const filtered = getFilteredShortcuts();
+      // ✅ FIX A: Accept pre-paged items instead of computing filtered set again
+      const itemsToRender = items || [];
 
       // Clear current content
-      // OPTIMIZATION: If we implement a diff engine, that's better, but for now full re-render is safer for correctness.
       grid.innerHTML = '';
 
-      if (filtered.length === 0) return;
+      if (itemsToRender.length === 0) return;
 
       // Initialize queue
-      renderQueue = filtered;
+      renderQueue = itemsToRender;
       let currentIndex = 0;
 
       function renderNextChunk() {
@@ -2840,12 +2863,18 @@
 
 
     function updateEmptyStates() {
+      // Delegate to list-aware version using global filteredShortcuts
+      updateEmptyStatesWithList_(filteredShortcuts);
+    }
+
+    // ✅ FIX A: Empty state helper that uses pre-computed list
+    function updateEmptyStatesWithList_(itemsOnPage) {
       const allEmpty = el('emptyStateAll');
       const favEmpty = el('emptyStateFav');
-      const filtered = getFilteredShortcuts();
       const favorites = state.shortcuts.filter(s => s.favorite);
 
-      if (filtered.length === 0) {
+      // Use global filteredShortcuts for "no results" vs itemsOnPage for current page
+      if (filteredShortcuts.length === 0) {
         allEmpty.classList.remove('hidden');
       } else {
         allEmpty.classList.add('hidden');
@@ -2866,6 +2895,14 @@
         filtered = filtered.filter(s => {
           const mainCat = (s.mainCategory || '').trim();
           return mainCat === state.mainCategoryFilter;
+        });
+      }
+
+      // ✅ FIX B: Apply style filter (uses fontStyle field)
+      if (activeStyleFilter !== 'all') {
+        filtered = filtered.filter(s => {
+          const style = String(s.fontStyle || '').toLowerCase();
+          return style === activeStyleFilter.toLowerCase();
         });
       }
 
@@ -2909,7 +2946,8 @@
           (s.language && s.language.toLowerCase().includes(query)) ||
           // Enhanced fields (v2.0)
           (s.mainCategory && s.mainCategory.toLowerCase().includes(query)) ||
-          (s.subcategory && s.subcategory.toLowerCase().includes(query))
+          (s.subcategory && s.subcategory.toLowerCase().includes(query)) ||
+          (s.fontStyle && s.fontStyle.toLowerCase().includes(query))
         );
       }
 
