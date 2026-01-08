@@ -246,34 +246,8 @@ function readSnapshotMeta_(token) {
 // ============================================================================
 // UI HANDLERS (Frontend calls these via google.script.run ✅)
 // ============================================================================
-
-/**
- * Called by UI on load to create snapshot + return first page + favorites.
- * @return {Object}
- */
-function beginShortcutsSnapshotHandler() {
-  try {
-    const meta = beginShortcutsSnapshot();
-    const page = fetchSnapshotPage_(meta.snapshotToken, 0, meta.pageSize);
-    if (page.error) return { ok: false, error: page.error };
-
-    return {
-      ok: true,
-      snapshotToken: meta.snapshotToken,
-      builtAt: meta.builtAt,
-      total: page.total,
-      offset: page.offset,
-      hasMore: page.hasMore,
-      pageSize: meta.pageSize,
-      shortcuts: page.items,
-      favorites: listMyFavorites_(),
-      userEmail: getUserEmail_()
-    };
-  } catch (err) {
-    console.error('beginShortcutsSnapshotHandler error:', stringifyError_(err));
-    return { ok: false, message: String(err && err.message ? err.message : err) };
-  }
-}
+// NOTE: beginShortcutsSnapshotHandler() is now in uiHandlers.gs (more complete version)
+// ============================================================================
 
 /**
  * Called by UI to fetch additional pages.
@@ -328,35 +302,8 @@ function openManagerDialog() {
   SpreadsheetApp.getUi().showModalDialog(html, 'Text Expansion Manager');
 }
 
-function openWebAppLinkDialog() {
-  ensureSheets_();
-  const url = getWebAppUrl_();
-  const safeUrl = url ? String(url).replace(/"/g, '&quot;') : '';
-  const body = url
-    ? `
-      <div style="font-family:Arial,sans-serif;line-height:1.4;padding:12px">
-        <h3 style="margin:0 0 8px 0">Open Web App</h3>
-        <p style="margin:0 0 10px 0">Click to open in a new tab:</p>
-        <p style="margin:0 0 10px 0"><a href="${safeUrl}" target="_blank" rel="noreferrer">${safeUrl}</a></p>
-        <button style="padding:8px 10px" onclick="navigator.clipboard.writeText('${safeUrl}');this.innerText='Copied!';">Copy URL</button>
-      </div>`
-    : `
-      <div style="font-family:Arial,sans-serif;line-height:1.4;padding:12px">
-        <h3 style="margin:0 0 8px 0">Web App URL Not Available</h3>
-        <p style="margin:0">Deploy as a Web App (Deploy → New deployment → Web app) to get a URL.</p>
-      </div>`;
-  const html = HtmlService.createHtmlOutput(body).setWidth(520).setHeight(260);
-  SpreadsheetApp.getUi().showModalDialog(html, 'Web App Link');
-}
-
-function doGet(e) {
-  ensureSheets_();
-  return HtmlService.createTemplateFromFile('Index')
-    .evaluate()
-    .setTitle('Text Expansion Manager')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-}
+// NOTE: openWebAppLinkDialog() is now in 05_TextExpander_EntryPoints_Revised.gs (upgraded version)
+// NOTE: doGet(e) is now in 00_ProjectEntryPoints.gs (unified router)
 
 function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();

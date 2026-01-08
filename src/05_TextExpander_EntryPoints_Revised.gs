@@ -114,7 +114,7 @@ function openWebAppLinkDialog() {
 function openTextExpanderCategorizer() {
   const url = CFG.PYTHON_URLS.TEXT_EXPANDER_CATEGORIZER;
   if (url) {
-    openUrlInNewTab_(url);
+    openUrl_(url, 'Text Expander Categorizer');
   } else {
     SpreadsheetApp.getUi().alert('Text Expander Categorizer URL not configured.');
   }
