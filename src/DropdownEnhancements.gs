@@ -1,18 +1,25 @@
 /**
- * DropdownEnhancements.gs
+ * DropdownEnhancements.gs (Revised ✅)
  * =======================
  * Enhanced dropdown columns for Text Expander Manager
- * 
- * Adds 5 new columns to the Shortcuts sheet:
- * - MainCategory (10 options)
- * - Subcategory (75 options, hierarchical)
- * - FontStyle (40 N-codes)
- * - Platform (8 options)
- * - UsageFrequency (5 options)
- * 
- * Author: Zenith Orchestrator
- * Version: 1.0.0
- * Date: 2025-12-28
+ *
+ * Adds / validates 5 dropdown columns on the Shortcuts sheet:
+ * - MainCategory
+ * - Subcategory
+ * - FontStyle
+ * - Platform
+ * - UsageFrequency
+ *
+ * Improvements vs original:
+ * ✅ Header-based column detection (no fragile hard-coded column numbers)
+ * ✅ Uses a helper sheet with option ranges (easy to edit without code)
+ * ✅ Applies validation down to max rows (scales past 1000 rows)
+ * ✅ Optional strict/lenient mode (AllowInvalid true/false)
+ * ✅ Batch-style updates (fewer calls, faster)
+ *
+ * Author: GAS Master 🤖✨
+ * Version: 2.0.0
+ * Date: 2026-01-08
  */
 
 // ============================================================================
@@ -20,6 +27,9 @@
 // ============================================================================
 
 const DROPDOWN_CONFIG = {
+  // Helper sheet name where dropdown options are stored (range-based validation)
+  OPTIONS_SHEET_NAME: '_TEM_DropdownOptions',
+
   // Main Category options (10)
   MAIN_CATEGORIES: [
     '🎯 Text Formatting',
@@ -34,20 +44,20 @@ const DROPDOWN_CONFIG = {
     '🏷️ Status & Labels'
   ],
 
-  // Subcategory options (75) - organized hierarchically
+  // Subcategory options (~75)
   SUBCATEGORIES: [
     // Text Formatting (5)
     'Strikethrough', 'Underline', 'Bold', 'Italic', 'Mixed Styles',
     // Symbols (6)
     'Arrows', 'Mathematical', 'Currency', 'Punctuation', 'Technical', 'Miscellaneous Symbols',
     // Emojis (10)
-    'Smileys & People', 'Animals & Nature', 'Food & Drink', 'Activities', 
+    'Smileys & People', 'Animals & Nature', 'Food & Drink', 'Activities',
     'Travel & Places', 'Objects', 'Symbols', 'Flags', 'Kaomoji', 'ASCII Art',
     // Dates & Time (7)
-    'Months (English)', 'Months (Spanish)', 'Days of Week', 'Time Formats', 
+    'Months (English)', 'Months (Spanish)', 'Days of Week', 'Time Formats',
     'Date Patterns', 'Seasons', 'Holidays',
     // Numbers (6)
-    'Cardinal Numbers', 'Ordinal Numbers', 'Roman Numerals', 'Fractions', 
+    'Cardinal Numbers', 'Ordinal Numbers', 'Roman Numerals', 'Fractions',
     'Number Blocks', 'Counters',
     // Communication (5)
     'Greetings', 'Farewells', 'Common Phrases', 'Email Templates', 'Social Media',
@@ -59,8 +69,8 @@ const DROPDOWN_CONFIG = {
     'Color Blocks', 'Colored Circles', 'Gradients', 'Rainbow',
     // Status (5)
     'Priority Markers', 'Status Icons', 'Checkboxes', 'Tags', 'Badges',
-    // Additional (16 more to reach ~75)
-    'Weather', 'Music', 'Sports', 'Gaming', 'Science', 'Medical', 
+    // Additional (16)
+    'Weather', 'Music', 'Sports', 'Gaming', 'Science', 'Medical',
     'Legal', 'Finance', 'Education', 'Art', 'Nature', 'Technology',
     'Transportation', 'Buildings', 'Clothing', 'Tools'
   ],
@@ -106,96 +116,50 @@ const DROPDOWN_CONFIG = {
 };
 
 // ============================================================================
-// MAIN FUNCTIONS (Menu-Callable)
+// PUBLIC MENU FUNCTIONS
 // ============================================================================
 
 /**
- * Adds enhanced dropdown columns to the Shortcuts sheet.
- * Call from menu: Setup → Add Enhanced Dropdowns (5 columns)
+ * Adds enhanced dropdown columns AND validations (Lenient mode).
+ * ✅ Allows invalid values so existing data won't be broken.
  */
 function addEnhancedDropdowns() {
-  const ui = SpreadsheetApp.getUi();
-  
-  // Confirm before proceeding
-  const response = ui.alert(
-    '🔽 Add Enhanced Dropdowns',
-    'This will add 5 new columns to the Shortcuts sheet:\n\n' +
-    '• MainCategory (column I)\n' +
-    '• Subcategory (column J)\n' +
-    '• FontStyle (column K)\n' +
-    '• Platform (column L)\n' +
-    '• UsageFrequency (column M)\n\n' +
-    'Existing data will NOT be modified.\n\n' +
-    'Continue?',
-    ui.ButtonSet.YES_NO
-  );
-  
-  if (response !== ui.Button.YES) {
-    ui.alert('Cancelled', 'No changes were made.', ui.ButtonSet.OK);
-    return;
-  }
-  
-  try {
-    const sheet = getShortcutsSheet_();
-    
-    // Add columns and validations
-    addDropdownColumn_(sheet, 'MainCategory', DROPDOWN_CONFIG.MAIN_CATEGORIES, 9);
-    addDropdownColumn_(sheet, 'Subcategory', DROPDOWN_CONFIG.SUBCATEGORIES, 10);
-    addDropdownColumn_(sheet, 'FontStyle', DROPDOWN_CONFIG.FONT_STYLES, 11);
-    addDropdownColumn_(sheet, 'Platform', DROPDOWN_CONFIG.PLATFORMS, 12);
-    addDropdownColumn_(sheet, 'UsageFrequency', DROPDOWN_CONFIG.USAGE_FREQUENCY, 13);
-    
-    // Freeze header row
-    sheet.setFrozenRows(1);
-    
-    ui.alert(
-      '✅ Success!',
-      '5 dropdown columns have been added.\n\n' +
-      'Next steps:\n' +
-      '1. Run the Google Colab notebook to auto-categorize\n' +
-      '2. Or manually select categories for each row\n' +
-      '3. Redeploy the web app to see new filters',
-      ui.ButtonSet.OK
-    );
-    
-    // Invalidate cache to force refresh
-    if (typeof invalidateShortcutsCache_ === 'function') {
-      invalidateShortcutsCache_();
-    }
-    
-  } catch (error) {
-    ui.alert('❌ Error', 'Failed to add dropdowns: ' + error.message, ui.ButtonSet.OK);
-    console.error('addEnhancedDropdowns error:', error);
-  }
+  addEnhancedDropdowns_(true);
 }
 
 /**
- * Creates a backup of the Shortcuts sheet before making changes.
+ * Adds enhanced dropdown columns AND validations (Strict mode).
+ * 🔒 Restricts values to dropdown list only (can flag/deny existing values).
+ */
+function addEnhancedDropdownsStrict() {
+  addEnhancedDropdowns_(false);
+}
+
+/**
+ * Creates a backup of the Shortcuts sheet before making changes. 💾
  */
 function createShortcutsBackup() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const source = ss.getSheetByName('Shortcuts');
-  
-  if (!source) {
-    throw new Error('Shortcuts sheet not found');
-  }
-  
-  const timestamp = Utilities.formatDate(new Date(), 'America/New_York', 'yyyyMMdd_HHmmss');
+  const source = ss.getSheetByName(getShortcutsSheetName_());
+
+  if (!source) throw new Error('Shortcuts sheet not found');
+
+  const timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
   const backupName = `Shortcuts_Backup_${timestamp}`;
-  
+
   source.copyTo(ss).setName(backupName);
-  
+
   SpreadsheetApp.getUi().alert(
     '✅ Backup Created',
-    `Backup saved as: ${backupName}\n\nYou can delete this sheet after verifying changes.`,
+    `Backup saved as: ${backupName}\n\nYou can delete it after verifying changes 🙂`,
     SpreadsheetApp.getUi().ButtonSet.OK
   );
-  
+
   return backupName;
 }
 
 /**
- * Shows the current dropdown configuration (for debugging).
+ * Shows the current dropdown configuration counts (debugging). 🧪
  */
 function showDropdownConfig() {
   const config = {
@@ -205,86 +169,326 @@ function showDropdownConfig() {
     platforms: DROPDOWN_CONFIG.PLATFORMS.length,
     usageFrequency: DROPDOWN_CONFIG.USAGE_FREQUENCY.length
   };
-  
+
   console.log('Dropdown Configuration:', config);
   return config;
 }
 
+/**
+ * Removes dropdown validations from the 5 columns (reset/testing). 🧹
+ */
+function removeDropdownValidations() {
+  const ui = SpreadsheetApp.getUi();
+  const sheet = getShortcutsSheet_();
+  const cols = resolveDropdownColumns_(sheet);
+
+  const lastRow = Math.max(sheet.getLastRow(), 2);
+  const numRows = Math.max(sheet.getMaxRows() - 1, lastRow - 1);
+
+  const targets = [
+    cols.mainCategoryCol,
+    cols.subcategoryCol,
+    cols.fontStyleCol,
+    cols.platformCol,
+    cols.usageFrequencyCol
+  ].filter(n => n > 0);
+
+  for (const col of targets) {
+    sheet.getRange(2, col, numRows, 1).clearDataValidations().clearNote();
+  }
+
+  ui.alert('✅ Done', 'Cleared dropdown validations for the 5 enhancement columns 🙂', ui.ButtonSet.OK);
+}
+
 // ============================================================================
-// HELPER FUNCTIONS
+// CORE IMPLEMENTATION
 // ============================================================================
 
 /**
- * Gets the Shortcuts sheet.
- * @returns {Sheet} The Shortcuts sheet
+ * Internal worker for both strict and lenient versions.
+ * @param {boolean} allowInvalid - true = lenient, false = strict
  */
-function getShortcutsSheet_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName('Shortcuts');
-  
-  if (!sheet) {
-    throw new Error('Shortcuts sheet not found');
+function addEnhancedDropdowns_(allowInvalid) {
+  const ui = SpreadsheetApp.getUi();
+
+  const response = ui.alert(
+    '🔽 Add Enhanced Dropdowns',
+    'This will ensure these 5 columns exist and apply dropdown validation:\n\n' +
+      '• MainCategory\n' +
+      '• Subcategory\n' +
+      '• FontStyle\n' +
+      '• Platform\n' +
+      '• UsageFrequency\n\n' +
+      `Mode: ${allowInvalid ? '✅ Lenient (allows custom values)' : '🔒 Strict (only dropdown values)'}\n\n` +
+      'Continue?',
+    ui.ButtonSet.YES_NO
+  );
+
+  if (response !== ui.Button.YES) {
+    ui.alert('Cancelled', 'No changes were made.', ui.ButtonSet.OK);
+    return;
   }
-  
+
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(15000)) {
+    ui.alert('⏳ Busy', 'Another operation is running. Try again in a moment 🙂', ui.ButtonSet.OK);
+    return;
+  }
+
+  try {
+    const sheet = getShortcutsSheet_();
+
+    // 1) Ensure option sheet exists and is populated
+    const optSheet = ensureOptionsSheet_();
+
+    // 2) Ensure columns exist by header name (append if missing)
+    ensureHeaderExists_(sheet, 'MainCategory');
+    ensureHeaderExists_(sheet, 'Subcategory');
+    ensureHeaderExists_(sheet, 'FontStyle');
+    ensureHeaderExists_(sheet, 'Platform');
+    ensureHeaderExists_(sheet, 'UsageFrequency');
+
+    // Re-resolve columns now that headers are ensured
+    const cols = resolveDropdownColumns_(sheet);
+
+    // 3) Write options into helper sheet (batch)
+    writeOptionsToSheet_(optSheet);
+
+    // 4) Apply range-based validation rules (very maintainable)
+    applyValidationFromOptions_(sheet, optSheet, cols, allowInvalid);
+
+    // 5) Freeze header row
+    sheet.setFrozenRows(1);
+
+    // 6) Invalidate cache if available (plays nice with your snapshot/cache layer)
+    safelyInvalidateTEMCache_();
+
+    ui.alert(
+      '✅ Success!',
+      'Dropdown columns are ready! 🎉\n\n' +
+        'Tips:\n' +
+        '• You can edit options anytime in the hidden "_TEM_DropdownOptions" sheet\n' +
+        '• If your UI filters rely on these fields, redeploy the web app to expose them\n' +
+        '• If you want strict enforcement later, run: addEnhancedDropdownsStrict() 🔒',
+      ui.ButtonSet.OK
+    );
+
+  } catch (error) {
+    console.error('addEnhancedDropdowns_ error:', error);
+    ui.alert('❌ Error', 'Failed to apply dropdowns: ' + error.message, ui.ButtonSet.OK);
+    throw error;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Ensures the helper options sheet exists and is hidden.
+ * @returns {GoogleAppsScript.Spreadsheet.Sheet}
+ */
+function ensureOptionsSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(DROPDOWN_CONFIG.OPTIONS_SHEET_NAME);
+
+  if (!sheet) {
+    sheet = ss.insertSheet(DROPDOWN_CONFIG.OPTIONS_SHEET_NAME);
+    sheet.setTabColor('#eeeeee');
+  }
+
+  // Keep it hidden to reduce clutter
+  try {
+    sheet.hideSheet();
+  } catch (e) {
+    // If user lacks permission to hide, non-fatal
+    Logger.log('⚠️ Could not hide options sheet: ' + e.message);
+  }
+
   return sheet;
 }
 
 /**
- * Adds a dropdown column with data validation.
- * @param {Sheet} sheet - Target sheet
- * @param {string} headerName - Column header name
- * @param {Array<string>} options - Dropdown options
- * @param {number} colIndex - 1-based column index
+ * Writes all dropdown options into the options sheet.
+ * Layout:
+ * A: MainCategory
+ * B: Subcategory
+ * C: FontStyle
+ * D: Platform
+ * E: UsageFrequency
  */
-function addDropdownColumn_(sheet, headerName, options, colIndex) {
-  const lastRow = sheet.getLastRow();
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  
-  // Check if column already exists
-  const existingCol = headers.indexOf(headerName);
-  if (existingCol >= 0) {
-    console.log(`Column '${headerName}' already exists at position ${existingCol + 1}`);
-    colIndex = existingCol + 1;
-  } else {
-    // Set header
-    sheet.getRange(1, colIndex).setValue(headerName).setFontWeight('bold');
+function writeOptionsToSheet_(optSheet) {
+  optSheet.clear();
+
+  const maxLen = Math.max(
+    DROPDOWN_CONFIG.MAIN_CATEGORIES.length,
+    DROPDOWN_CONFIG.SUBCATEGORIES.length,
+    DROPDOWN_CONFIG.FONT_STYLES.length,
+    DROPDOWN_CONFIG.PLATFORMS.length,
+    DROPDOWN_CONFIG.USAGE_FREQUENCY.length
+  );
+
+  const header = ['MainCategory', 'Subcategory', 'FontStyle', 'Platform', 'UsageFrequency'];
+
+  const rows = [];
+  for (let i = 0; i < maxLen; i++) {
+    rows.push([
+      DROPDOWN_CONFIG.MAIN_CATEGORIES[i] || '',
+      DROPDOWN_CONFIG.SUBCATEGORIES[i] || '',
+      DROPDOWN_CONFIG.FONT_STYLES[i] || '',
+      DROPDOWN_CONFIG.PLATFORMS[i] || '',
+      DROPDOWN_CONFIG.USAGE_FREQUENCY[i] || ''
+    ]);
   }
-  
-  // Create validation rule
-  const rule = SpreadsheetApp.newDataValidation()
-    .requireValueInList(options, true)
-    .setAllowInvalid(false)
-    .setHelpText(`Select a ${headerName} from the dropdown`)
-    .build();
-  
-  // Apply to data range (skip header)
-  if (lastRow > 1) {
-    const dataRange = sheet.getRange(2, colIndex, lastRow - 1, 1);
-    dataRange.setDataValidation(rule);
-  }
-  
-  // Also set validation on the column for future rows
-  const futureRange = sheet.getRange(2, colIndex, 1000, 1);
-  futureRange.setDataValidation(rule);
-  
-  console.log(`✓ Added dropdown: ${headerName} (column ${colIndex}) with ${options.length} options`);
+
+  optSheet.getRange(1, 1, 1, header.length).setValues([header]).setFontWeight('bold');
+  optSheet.getRange(2, 1, rows.length, header.length).setValues(rows);
+
+  // Auto-size a bit for readability
+  for (let c = 1; c <= header.length; c++) optSheet.autoResizeColumn(c);
 }
 
 /**
- * Removes all dropdown validations (for reset/testing).
+ * Applies range-based dropdown validations to the Shortcuts sheet.
+ * Uses requireValueInRange (instead of requireValueInList) for maintainability.
+ *
+ * Note: Some users report helpText behavior differs when allowInvalid=true.
  */
-function removeDropdownValidations_() {
-  const sheet = getShortcutsSheet_();
-  const lastRow = sheet.getLastRow();
-  
-  // Clear validations from columns I-M (9-13)
-  for (let col = 9; col <= 13; col++) {
-    if (lastRow > 1) {
-      sheet.getRange(2, col, lastRow - 1, 1).clearDataValidations();
-    }
+function applyValidationFromOptions_(shortcutsSheet, optSheet, cols, allowInvalid) {
+  const maxRows = shortcutsSheet.getMaxRows();
+  const numRows = Math.max(maxRows - 1, 1);
+
+  const lastOptRow = Math.max(optSheet.getLastRow(), 2);
+
+  const ranges = {
+    main: optSheet.getRange(2, 1, lastOptRow - 1, 1),
+    sub: optSheet.getRange(2, 2, lastOptRow - 1, 1),
+    font: optSheet.getRange(2, 3, lastOptRow - 1, 1),
+    plat: optSheet.getRange(2, 4, lastOptRow - 1, 1),
+    freq: optSheet.getRange(2, 5, lastOptRow - 1, 1)
+  };
+
+  const ruleMain = SpreadsheetApp.newDataValidation()
+    .requireValueInRange(ranges.main, true)
+    .setAllowInvalid(allowInvalid)
+    .setHelpText('Pick a MainCategory from the dropdown 🙂')
+    .build();
+
+  const ruleSub = SpreadsheetApp.newDataValidation()
+    .requireValueInRange(ranges.sub, true)
+    .setAllowInvalid(allowInvalid)
+    .setHelpText('Pick a Subcategory from the dropdown 🙂')
+    .build();
+
+  const ruleFont = SpreadsheetApp.newDataValidation()
+    .requireValueInRange(ranges.font, true)
+    .setAllowInvalid(allowInvalid)
+    .setHelpText('Pick a FontStyle from the dropdown 🙂')
+    .build();
+
+  const rulePlat = SpreadsheetApp.newDataValidation()
+    .requireValueInRange(ranges.plat, true)
+    .setAllowInvalid(allowInvalid)
+    .setHelpText('Pick a Platform from the dropdown 🙂')
+    .build();
+
+  const ruleFreq = SpreadsheetApp.newDataValidation()
+    .requireValueInRange(ranges.freq, true)
+    .setAllowInvalid(allowInvalid)
+    .setHelpText('Pick a UsageFrequency from the dropdown 🙂')
+    .build();
+
+  // Apply to full columns (row 2 to max rows)
+  shortcutsSheet.getRange(2, cols.mainCategoryCol, numRows, 1).setDataValidation(ruleMain);
+  shortcutsSheet.getRange(2, cols.subcategoryCol, numRows, 1).setDataValidation(ruleSub);
+  shortcutsSheet.getRange(2, cols.fontStyleCol, numRows, 1).setDataValidation(ruleFont);
+  shortcutsSheet.getRange(2, cols.platformCol, numRows, 1).setDataValidation(rulePlat);
+  shortcutsSheet.getRange(2, cols.usageFrequencyCol, numRows, 1).setDataValidation(ruleFreq);
+
+  console.log('✅ Applied dropdown validations to max rows:', maxRows);
+}
+
+/**
+ * Ensures a header exists in row 1; if missing, append it at the end.
+ * This avoids risky hard-coded positions when sheet structure evolves.
+ */
+function ensureHeaderExists_(sheet, headerName) {
+  const lastCol = Math.max(sheet.getLastColumn(), 1);
+  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(v => String(v || '').trim());
+
+  const exists = headers.indexOf(headerName) !== -1;
+  if (exists) return;
+
+  const newCol = lastCol + 1;
+  sheet.getRange(1, newCol).setValue(headerName).setFontWeight('bold');
+  console.log(`➕ Added missing header "${headerName}" at column ${newCol}`);
+}
+
+/**
+ * Resolves dropdown column indices by header name.
+ * @returns {{mainCategoryCol:number, subcategoryCol:number, fontStyleCol:number, platformCol:number, usageFrequencyCol:number}}
+ */
+function resolveDropdownColumns_(sheet) {
+  const lastCol = Math.max(sheet.getLastColumn(), 1);
+  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(v => String(v || '').trim());
+
+  const map = {};
+  for (let i = 0; i < headers.length; i++) {
+    const h = headers[i];
+    if (h) map[h] = i + 1;
   }
-  
-  console.log('Cleared dropdown validations from columns I-M');
+
+  const out = {
+    mainCategoryCol: map['MainCategory'] || -1,
+    subcategoryCol: map['Subcategory'] || -1,
+    fontStyleCol: map['FontStyle'] || -1,
+    platformCol: map['Platform'] || -1,
+    usageFrequencyCol: map['UsageFrequency'] || -1
+  };
+
+  // Safety check
+  Object.entries(out).forEach(([k, v]) => {
+    if (v < 1) throw new Error(`Missing required header for dropdown: ${k}`);
+  });
+
+  return out;
+}
+
+/**
+ * Returns the Shortcuts sheet name from global CFG if available, else fallback.
+ */
+function getShortcutsSheetName_() {
+  try {
+    if (typeof CFG !== 'undefined' && CFG && CFG.SHEET_SHORTCUTS) return CFG.SHEET_SHORTCUTS;
+  } catch (e) {}
+  return 'Shortcuts';
+}
+
+/**
+ * Gets Shortcuts sheet safely.
+ * @returns {GoogleAppsScript.Spreadsheet.Sheet}
+ */
+function getShortcutsSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const name = getShortcutsSheetName_();
+  const sheet = ss.getSheetByName(name);
+  if (!sheet) throw new Error(`Shortcuts sheet not found ("${name}")`);
+  return sheet;
+}
+
+/**
+ * Attempts to invalidate your Text Expander cache/version if those functions exist.
+ */
+function safelyInvalidateTEMCache_() {
+  try {
+    if (typeof invalidateShortcutsCache_ === 'function') invalidateShortcutsCache_();
+  } catch (e) {
+    Logger.log('⚠️ invalidateShortcutsCache_ failed (non-fatal): ' + e.message);
+  }
+
+  try {
+    if (typeof bumpCacheVersion_ === 'function') bumpCacheVersion_();
+  } catch (e) {
+    Logger.log('⚠️ bumpCacheVersion_ failed (non-fatal): ' + e.message);
+  }
 }
 
 // ============================================================================
@@ -292,43 +496,53 @@ function removeDropdownValidations_() {
 // ============================================================================
 
 /**
- * Test function to verify dropdown configuration.
+ * Test function to verify dropdown setup.
  */
 function testDropdownEnhancements() {
   console.log('=== Dropdown Enhancement Test ===\n');
-  
-  // Test A: Configuration loaded
+
   console.log('TEST A: Configuration loaded');
   console.log(`  Main Categories: ${DROPDOWN_CONFIG.MAIN_CATEGORIES.length}`);
   console.log(`  Subcategories: ${DROPDOWN_CONFIG.SUBCATEGORIES.length}`);
   console.log(`  Font Styles: ${DROPDOWN_CONFIG.FONT_STYLES.length}`);
   console.log(`  Platforms: ${DROPDOWN_CONFIG.PLATFORMS.length}`);
   console.log(`  Usage Frequency: ${DROPDOWN_CONFIG.USAGE_FREQUENCY.length}`);
-  
-  // Test B: Sheet access
+
   console.log('\nTEST B: Sheet access');
   try {
     const sheet = getShortcutsSheet_();
-    console.log(`  ✓ Shortcuts sheet found: ${sheet.getLastRow()} rows`);
+    console.log(`  ✅ Shortcuts sheet found: ${sheet.getLastRow()} rows, ${sheet.getLastColumn()} cols`);
   } catch (e) {
-    console.log(`  ✗ Error: ${e.message}`);
+    console.log(`  ❌ Error: ${e.message}`);
+    return false;
   }
-  
-  // Test C: Current headers
-  console.log('\nTEST C: Current headers');
+
+  console.log('\nTEST C: Column resolution');
   try {
     const sheet = getShortcutsSheet_();
-    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    console.log(`  Current columns: ${headers.join(', ')}`);
-    
-    const hasMainCategory = headers.includes('MainCategory');
-    const hasSubcategory = headers.includes('Subcategory');
-    console.log(`  MainCategory exists: ${hasMainCategory}`);
-    console.log(`  Subcategory exists: ${hasSubcategory}`);
+    ensureHeaderExists_(sheet, 'MainCategory');
+    ensureHeaderExists_(sheet, 'Subcategory');
+    ensureHeaderExists_(sheet, 'FontStyle');
+    ensureHeaderExists_(sheet, 'Platform');
+    ensureHeaderExists_(sheet, 'UsageFrequency');
+
+    const cols = resolveDropdownColumns_(sheet);
+    console.log('  ✅ Columns:', cols);
   } catch (e) {
-    console.log(`  ✗ Error: ${e.message}`);
+    console.log(`  ❌ Error: ${e.message}`);
+    return false;
   }
-  
-  console.log('\n=== Test Complete ===');
+
+  console.log('\nTEST D: Options sheet');
+  try {
+    const opt = ensureOptionsSheet_();
+    writeOptionsToSheet_(opt);
+    console.log(`  ✅ Options sheet ok: ${opt.getName()} (rows=${opt.getLastRow()})`);
+  } catch (e) {
+    console.log(`  ❌ Error: ${e.message}`);
+    return false;
+  }
+
+  console.log('\n=== Test Complete ✅ ===');
   return true;
 }
