@@ -1,27 +1,48 @@
 /**
- * 🌉 COLAB BRIDGE SYSTEM
+ * 🌉 COLAB BRIDGE SYSTEM (Revised ✅)
  * =====================================================
  * Manages communication between Apps Script and Python via Google Drive
- * Message Queue Pattern: GAS → Drive JSON → Python → Drive JSON → GAS
- * 
+ * Pattern: GAS → Drive JSON → Python → Drive JSON → GAS
+ *
+ * Fixes included:
+ * ✅ Stores folder ID automatically in DocumentProperties
+ * ✅ Uses LockService to prevent concurrency collisions
+ * ✅ Adds stable ID-based mapping (fallback to rowId)
+ * ✅ Batch updates in ingest (FAST 🚀)
+ * ✅ Safer file archiving instead of hard-trash (trash still attempted if allowed)
+ *
  * Created: 2025-12-30
  * Part of: G.A.S_Text_Expander_Manager
  */
 
-/**
- * Bridge Configuration
- * 🔴 DRIVE_FOLDER_ID will be auto-generated on first run if left empty
- */
+// ============================================================================
+// CONFIGURATION
+// ============================================================================
+
 const BRIDGE_CONFIG = {
-  DRIVE_FOLDER_ID: "",  // Auto-created on first run
+  DRIVE_FOLDER_ID: "", // Optional override; system auto-stores ID in DocumentProperties
   DRIVE_FOLDER_NAME: "TextExpanderBridge",
+
   CATEGORY_SOURCE_RANGE: "Categories!A2:A50",
   DATA_SHEET_NAME: "Shortcuts",
-  TEXT_COLUMN: 3,       // Column C (Content)
-  CATEGORY_COLUMN: 9,   // Column I (MainCategory) - matches HEADERS_SHORTCUTS
+
+  // Fallback column positions (used only if header lookup fails)
+  TEXT_COLUMN: 3,        // Column C (Content)
+  CATEGORY_COLUMN: 9,    // Column I (MainCategory)
   DESCRIPTION_COLUMN: 5, // Column E (Description)
-  MAX_TASK_FILES: 5,    // Keep last N task files
-  MAX_TEXT_LENGTH: 1000 // Truncate text for processing
+
+  MAX_TASK_FILES: 5,     // Keep last N archived task files
+  MAX_TEXT_LENGTH: 1000, // Truncate text for processing
+
+  // Filenames used by Python
+  PENDING_FILE: "pending_tasks.json",
+  RESULTS_FILE: "results_latest.json",
+
+  // Property key to store folder ID per spreadsheet
+  PROP_FOLDER_ID: "TEM_BRIDGE_FOLDER_ID",
+
+  // Locks
+  LOCK_TIMEOUT_MS: 15000
 };
 
 
@@ -30,50 +51,78 @@ const BRIDGE_CONFIG = {
 // ============================================================================
 
 /**
- * Gets or creates the bridge folder in Google Drive
+ * Gets or creates the bridge folder in Google Drive.
+ * Stores its ID in DocumentProperties for persistence 📌
+ *
+ * Note: Drive operations require Drive scopes.
+ *
  * @returns {GoogleAppsScript.Drive.Folder} The bridge folder
  */
 function ensureBridgeFolderExists() {
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(BRIDGE_CONFIG.LOCK_TIMEOUT_MS)) {
+    throw new Error("⏳ Bridge folder busy (another run in progress). Please try again.");
+  }
+
   try {
-    // First try to use configured folder ID
+    // 1) Use hard-coded override if present
     if (BRIDGE_CONFIG.DRIVE_FOLDER_ID && BRIDGE_CONFIG.DRIVE_FOLDER_ID.trim() !== "") {
       try {
-        return DriveApp.getFolderById(BRIDGE_CONFIG.DRIVE_FOLDER_ID);
+        const folder = DriveApp.getFolderById(BRIDGE_CONFIG.DRIVE_FOLDER_ID.trim());
+        storeBridgeFolderId_(folder.getId());
+        return folder;
       } catch (e) {
-        Logger.log(`⚠️ Configured folder ID not found: ${e.message}`);
+        Logger.log(`⚠️ Configured folder ID not found/accessible: ${e.message}`);
       }
     }
-    
-    // Search for existing folder by name
+
+    // 2) Use stored DocumentProperties ID if present
+    const storedId = getBridgeFolderId_();
+    if (storedId) {
+      try {
+        const folder = DriveApp.getFolderById(storedId);
+        return folder;
+      } catch (e) {
+        Logger.log(`⚠️ Stored folder ID not found/accessible: ${e.message}`);
+      }
+    }
+
+    // 3) Search by name (may find multiple; we take first)
     const folders = DriveApp.getFoldersByName(BRIDGE_CONFIG.DRIVE_FOLDER_NAME);
     if (folders.hasNext()) {
       const folder = folders.next();
-      Logger.log(`✅ Found existing folder: ${folder.getId()}`);
+      Logger.log(`✅ Found existing folder by name: ${folder.getId()}`);
+      storeBridgeFolderId_(folder.getId());
       return folder;
     }
-    
-    // Create new folder
+
+    // 4) Create folder in My Drive root
+    // Note: DriveApp has limitations vs Advanced Drive service. For shared drives,
+    // Advanced Drive is usually recommended.
     const rootFolder = DriveApp.getRootFolder();
     const newFolder = rootFolder.createFolder(BRIDGE_CONFIG.DRIVE_FOLDER_NAME);
-    
+
     const folderId = newFolder.getId();
+    storeBridgeFolderId_(folderId);
+
     Logger.log(`✅ Created new folder: ${folderId}`);
-    
+
     SpreadsheetApp.getUi().alert(
       `✅ Bridge Folder Created!\n\n` +
-      `Folder Name: ${BRIDGE_CONFIG.DRIVE_FOLDER_NAME}\n` +
-      `Folder ID: ${folderId}\n\n` +
-      `📋 Optional: Update BRIDGE_CONFIG.DRIVE_FOLDER_ID in ColabBridge.gs with this ID for faster lookups.`
+      `📁 Name: ${BRIDGE_CONFIG.DRIVE_FOLDER_NAME}\n` +
+      `🆔 ID: ${folderId}\n\n` +
+      `This ID is now saved automatically for this spreadsheet 😄`
     );
-    
+
     return newFolder;
-    
+
   } catch (error) {
     Logger.log(`❌ Folder error: ${error.toString()}`);
     throw new Error(`Failed to access/create bridge folder: ${error.message}`);
+  } finally {
+    lock.releaseLock();
   }
 }
-
 
 /**
  * Shows folder setup dialog with current folder info
@@ -81,23 +130,69 @@ function ensureBridgeFolderExists() {
 function showBridgeFolderInfo() {
   try {
     const folder = ensureBridgeFolderExists();
-    const fileCount = folder.getFiles();
+    const files = folder.getFiles();
     let count = 0;
-    while (fileCount.hasNext()) {
-      fileCount.next();
+    while (files.hasNext()) {
+      files.next();
       count++;
     }
-    
+
     SpreadsheetApp.getUi().alert(
       `🌉 Bridge Folder Info\n\n` +
       `📁 Name: ${folder.getName()}\n` +
       `🆔 ID: ${folder.getId()}\n` +
       `📄 Files: ${count}\n` +
-      `🔗 URL: ${folder.getUrl()}`
+      `🔗 URL: ${folder.getUrl()}\n\n` +
+      `📌 Stored in DocumentProperties: ${getBridgeFolderId_() ? "Yes ✅" : "No ❌"}`
     );
   } catch (error) {
     SpreadsheetApp.getUi().alert(`❌ Error: ${error.message}`);
   }
+}
+
+/**
+ * Stores the folder ID in DocumentProperties so it persists per spreadsheet.
+ */
+function storeBridgeFolderId_(folderId) {
+  const props = PropertiesService.getDocumentProperties();
+  props.setProperty(BRIDGE_CONFIG.PROP_FOLDER_ID, String(folderId || "").trim());
+}
+
+/**
+ * Reads the folder ID from DocumentProperties.
+ */
+function getBridgeFolderId_() {
+  const props = PropertiesService.getDocumentProperties();
+  const id = props.getProperty(BRIDGE_CONFIG.PROP_FOLDER_ID);
+  return id ? String(id).trim() : "";
+}
+
+
+// ============================================================================
+// HEADER-AWARE COLUMN RESOLUTION (More robust than hard-coded indices 🧠)
+// ============================================================================
+
+/**
+ * Attempts to resolve required columns by header name.
+ * Falls back to BRIDGE_CONFIG.*_COLUMN values if headers are missing.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet
+ * @returns {{textCol:number, categoryCol:number, descriptionCol:number, idCol:number, snippetCol:number}}
+ */
+function resolveBridgeColumns_(sheet) {
+  const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h || "").trim());
+
+  const idx = {};
+  header.forEach((h, i) => { if (h) idx[h.toLowerCase()] = i + 1; });
+
+  const textCol = idx["content"] || BRIDGE_CONFIG.TEXT_COLUMN;
+  const categoryCol = idx["maincategory"] || BRIDGE_CONFIG.CATEGORY_COLUMN;
+  const descriptionCol = idx["description"] || BRIDGE_CONFIG.DESCRIPTION_COLUMN;
+
+  const idCol = idx["id"] || 1;
+  const snippetCol = idx["snippet name"] || 2;
+
+  return { textCol, categoryCol, descriptionCol, idCol, snippetCol };
 }
 
 
@@ -110,74 +205,66 @@ function showBridgeFolderInfo() {
  * Creates a JSON task file in Google Drive for Python to process
  */
 function triggerPythonCategorization() {
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(BRIDGE_CONFIG.LOCK_TIMEOUT_MS)) {
+    SpreadsheetApp.getUi().alert("⏳ Another bridge action is running. Try again in a moment 🙂");
+    return;
+  }
+
   const startTime = new Date();
   const ui = SpreadsheetApp.getUi();
-  
+
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName(BRIDGE_CONFIG.DATA_SHEET_NAME);
-    
-    if (!sheet) {
-      throw new Error(`Sheet "${BRIDGE_CONFIG.DATA_SHEET_NAME}" not found`);
-    }
-    
-    // 1️⃣ Get all data
+
+    if (!sheet) throw new Error(`Sheet "${BRIDGE_CONFIG.DATA_SHEET_NAME}" not found`);
+
     const data = sheet.getDataRange().getValues();
     if (data.length < 2) {
-      ui.alert("⚠️ No data found in sheet (only headers)");
+      ui.alert("⚠️ No data found in sheet (only headers).");
       return;
     }
-    
-    const headers = data[0];
-    
-    // 2️⃣ Find uncategorized items
+
+    const cols = resolveBridgeColumns_(sheet);
+
+    // 1️⃣ Find uncategorized items
     const pendingTasks = [];
     for (let i = 1; i < data.length; i++) {
-      const text = data[i][BRIDGE_CONFIG.TEXT_COLUMN - 1];
-      const description = data[i][BRIDGE_CONFIG.DESCRIPTION_COLUMN - 1];
-      const category = data[i][BRIDGE_CONFIG.CATEGORY_COLUMN - 1];
-      
-      // Include if category is empty or null
+      const row = data[i];
+
+      const id = String(row[cols.idCol - 1] || "").trim();
+      const snippetName = String(row[cols.snippetCol - 1] || "").trim();
+
+      const text = row[cols.textCol - 1];
+      const description = row[cols.descriptionCol - 1];
+      const category = row[cols.categoryCol - 1];
+
       if (text && (!category || String(category).trim() === "")) {
         pendingTasks.push({
-          rowId: i + 1,  // 1-indexed for sheet reference
+          rowId: i + 1, // 1-indexed for sheet reference
+          shortcutId: id || "", // ✅ stable identifier (preferred)
+          snippetName: snippetName || "",
           text: String(text).substring(0, BRIDGE_CONFIG.MAX_TEXT_LENGTH),
           description: String(description || "").substring(0, 500)
         });
       }
     }
-    
+
     if (pendingTasks.length === 0) {
       ui.alert("✨ All items are already categorized!");
       return;
     }
-    
-    // 3️⃣ Get available categories
-    let categories = [];
-    try {
-      const categoryRange = ss.getRange(BRIDGE_CONFIG.CATEGORY_SOURCE_RANGE);
-      categories = categoryRange.getValues()
-        .flat()
-        .filter(cat => cat && String(cat).trim() !== "");
-    } catch (e) {
-      Logger.log(`⚠️ Could not read categories from ${BRIDGE_CONFIG.CATEGORY_SOURCE_RANGE}: ${e.message}`);
-      // Fallback: extract unique categories from existing data
-      const existingCategories = new Set();
-      for (let i = 1; i < data.length; i++) {
-        const cat = data[i][BRIDGE_CONFIG.CATEGORY_COLUMN - 1];
-        if (cat && String(cat).trim() !== "") {
-          existingCategories.add(String(cat).trim());
-        }
-      }
-      categories = Array.from(existingCategories);
-    }
-    
+
+    // 2️⃣ Get available categories
+    const categories = readBridgeCategories_(ss, data, cols.categoryCol);
+
     if (categories.length === 0) {
-      ui.alert("⚠️ No categories found! Please add categories to the Categories sheet first.");
+      ui.alert("⚠️ No categories found!\n\nAdd categories to the Categories sheet first (range: " + BRIDGE_CONFIG.CATEGORY_SOURCE_RANGE + ").");
       return;
     }
-    
-    // 4️⃣ Create task payload
+
+    // 3️⃣ Create task payload
     const payload = {
       timestamp: new Date().toISOString(),
       spreadsheetId: ss.getId(),
@@ -187,79 +274,125 @@ function triggerPythonCategorization() {
       totalTasks: pendingTasks.length,
       tasks: pendingTasks
     };
-    
-    // 5️⃣ Write to Drive
+
+    // 4️⃣ Write to Drive
     const folder = ensureBridgeFolderExists();
-    const fileName = `pending_tasks.json`;  // Fixed name for Python to find easily
-    
-    // Remove existing pending_tasks.json if present
-    const existingFiles = folder.getFilesByName(fileName);
-    while (existingFiles.hasNext()) {
-      existingFiles.next().setTrashed(true);
-    }
-    
+
+    // Archive existing pending file instead of trashing aggressively (safer permissions-wise)
+    archiveIfExists_(folder, BRIDGE_CONFIG.PENDING_FILE, "task");
+
     const file = folder.createFile(
-      fileName,
+      BRIDGE_CONFIG.PENDING_FILE,
       JSON.stringify(payload, null, 2),
       MimeType.PLAIN_TEXT
     );
-    
-    // 6️⃣ Archive old task files (keep last N)
+
+    // 5️⃣ Cleanup old archived tasks
     cleanupOldTaskFiles_(folder);
-    
-    const elapsed = ((new Date()) - startTime) / 1000;
-    
+
+    const elapsed = (new Date() - startTime) / 1000;
+
     ui.alert(
       `🚀 Python Processing Queued!\n\n` +
       `📝 Items queued: ${pendingTasks.length}\n` +
       `📋 Categories available: ${categories.length}\n` +
-      `📁 File: ${fileName}\n` +
+      `📁 File: ${BRIDGE_CONFIG.PENDING_FILE}\n` +
       `⏱️ Time: ${elapsed.toFixed(2)}s\n\n` +
       `Next Steps:\n` +
-      `1. Open Google Colab\n` +
-      `2. Run DriveCategorizerBridge.py\n` +
-      `3. Return here and click '📥 Import Results'`
+      `1) Open Colab 🐍\n` +
+      `2) Run DriveCategorizerBridge\n` +
+      `3) Return here and click '📥 Import Results'`
     );
-    
+
     Logger.log(`✅ Task file created: ${file.getUrl()}`);
-    
+
   } catch (error) {
     Logger.log(`❌ Trigger error: ${error.toString()}`);
     ui.alert(`❌ Error: ${error.message}`);
     throw error;
+  } finally {
+    lock.releaseLock();
   }
 }
 
+/**
+ * Reads categories from configured range; falls back to unique existing categories in sheet.
+ */
+function readBridgeCategories_(ss, data, categoryCol) {
+  let categories = [];
+
+  try {
+    const range = ss.getRange(BRIDGE_CONFIG.CATEGORY_SOURCE_RANGE);
+    categories = range.getValues()
+      .flat()
+      .map(v => String(v || "").trim())
+      .filter(v => v !== "");
+  } catch (e) {
+    Logger.log(`⚠️ Could not read categories from ${BRIDGE_CONFIG.CATEGORY_SOURCE_RANGE}: ${e.message}`);
+  }
+
+  if (categories.length > 0) return unique_(categories);
+
+  // fallback: extract unique categories already present
+  const existing = new Set();
+  for (let i = 1; i < data.length; i++) {
+    const cat = String(data[i][categoryCol - 1] || "").trim();
+    if (cat) existing.add(cat);
+  }
+  return Array.from(existing);
+}
+
+/**
+ * Archives a file if it exists: rename to <prefix>_<timestamp>.json
+ * Attempts to trash if rename fails (Drive permissions can vary).
+ */
+function archiveIfExists_(folder, filename, prefix) {
+  const files = folder.getFilesByName(filename);
+  while (files.hasNext()) {
+    const f = files.next();
+    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+    const newName = `${prefix}_${ts}.json`;
+    try {
+      f.setName(newName);
+      Logger.log(`📦 Archived ${filename} -> ${newName}`);
+    } catch (e) {
+      Logger.log(`⚠️ Rename archive failed; attempting trash: ${e.message}`);
+      try {
+        f.setTrashed(true);
+      } catch (trashErr) {
+        Logger.log(`❌ Trash failed (permissions?): ${trashErr.message}`);
+      }
+    }
+  }
+}
 
 /**
  * Cleans up old task archive files, keeping only the most recent N
- * @param {GoogleAppsScript.Drive.Folder} folder - The bridge folder
  */
 function cleanupOldTaskFiles_(folder) {
   try {
     const files = folder.getFiles();
     const taskFiles = [];
-    
+
     while (files.hasNext()) {
       const file = files.next();
       const name = file.getName();
-      // Match archived task files (task_*.json pattern)
       if (name.startsWith("task_") && name.endsWith(".json")) {
-        taskFiles.push({
-          file: file,
-          date: file.getDateCreated()
-        });
+        taskFiles.push({ file, date: file.getDateCreated() });
       }
     }
-    
-    // Sort by date (newest first) and trash old ones
+
     taskFiles.sort((a, b) => b.date - a.date);
-    
+
     for (let i = BRIDGE_CONFIG.MAX_TASK_FILES; i < taskFiles.length; i++) {
-      taskFiles[i].file.setTrashed(true);
-      Logger.log(`🗑️ Archived old task file: ${taskFiles[i].file.getName()}`);
+      try {
+        taskFiles[i].file.setTrashed(true);
+        Logger.log(`🗑️ Trashed old task file: ${taskFiles[i].file.getName()}`);
+      } catch (e) {
+        Logger.log(`⚠️ Could not trash old task file: ${taskFiles[i].file.getName()} (${e.message})`);
+      }
     }
-    
+
   } catch (e) {
     Logger.log(`⚠️ Cleanup error (non-fatal): ${e.message}`);
   }
@@ -267,125 +400,165 @@ function cleanupOldTaskFiles_(folder) {
 
 
 // ============================================================================
-// INGEST PYTHON RESULTS
+// INGEST PYTHON RESULTS (FAST BATCH MODE 🚀)
 // ============================================================================
 
 /**
  * 📥 Imports Python categorization results back into the sheet
- * Reads results_latest.json from Drive and updates cells
+ * Reads results_latest.json from Drive and updates cells in a single batch write.
+ *
+ * Batch writing is a recommended Apps Script best practice for speed.
  */
 function ingestPythonResults() {
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(BRIDGE_CONFIG.LOCK_TIMEOUT_MS)) {
+    SpreadsheetApp.getUi().alert("⏳ Another bridge action is running. Try again shortly 🙂");
+    return;
+  }
+
   const startTime = new Date();
   const ui = SpreadsheetApp.getUi();
-  
+
   try {
     const folder = ensureBridgeFolderExists();
-    const files = folder.getFilesByName("results_latest.json");
-    
+    const files = folder.getFilesByName(BRIDGE_CONFIG.RESULTS_FILE);
+
     if (!files.hasNext()) {
       ui.alert(
         "⏳ No Results Found\n\n" +
-        "The results_latest.json file doesn't exist yet.\n\n" +
+        `The "${BRIDGE_CONFIG.RESULTS_FILE}" file doesn't exist yet.\n\n` +
         "Please:\n" +
-        "1. Open Google Colab\n" +
-        "2. Run the DriveCategorizerBridge.py script\n" +
-        "3. Try this import again"
+        "1) Open Google Colab 🐍\n" +
+        "2) Run the DriveCategorizerBridge script\n" +
+        "3) Try this import again ✅"
       );
       return;
     }
-    
+
     const file = files.next();
     const content = file.getBlob().getDataAsString();
-    const data = JSON.parse(content);
-    
-    // Check for Python-side errors
-    if (data.error) {
-      throw new Error(`Python processing failed: ${data.error}`);
-    }
-    
-    if (!data.results || data.results.length === 0) {
+    const parsed = JSON.parse(content);
+
+    if (parsed.error) throw new Error(`Python processing failed: ${parsed.error}`);
+    if (!parsed.results || parsed.results.length === 0) {
       ui.alert("⚠️ Results file exists but contains no categorizations.");
       return;
     }
-    
-    // Get the sheet
+
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName(BRIDGE_CONFIG.DATA_SHEET_NAME);
-    
-    if (!sheet) {
-      throw new Error(`Sheet "${BRIDGE_CONFIG.DATA_SHEET_NAME}" not found`);
+    if (!sheet) throw new Error(`Sheet "${BRIDGE_CONFIG.DATA_SHEET_NAME}" not found`);
+
+    const cols = resolveBridgeColumns_(sheet);
+
+    // Build map from shortcutId -> rowIndex for stable matching
+    const lastRow = sheet.getLastRow();
+    const numDataRows = Math.max(lastRow - 1, 0);
+    if (numDataRows === 0) {
+      ui.alert("⚠️ No data rows found to update.");
+      return;
     }
-    
-    // Apply results
+
+    const idRange = sheet.getRange(2, cols.idCol, numDataRows, 1).getValues().map(r => String(r[0] || "").trim());
+    const idToRow = new Map();
+    for (let i = 0; i < idRange.length; i++) {
+      if (idRange[i]) idToRow.set(idRange[i], i + 2);
+    }
+
+    // Read current column state once
+    const catRange = sheet.getRange(2, cols.categoryCol, numDataRows, 1);
+    const catValues = catRange.getValues();
+    const catBgs = catRange.getBackgrounds();
+    const catNotes = catRange.getNotes();
+
     let updateCount = 0;
     let lowConfidenceCount = 0;
     let errorCount = 0;
-    
-    for (const result of data.results) {
+
+    // Apply results to arrays
+    for (const result of parsed.results) {
       try {
-        const rowId = result.rowId;
-        const category = result.suggestedCategory;
-        const confidence = result.confidence || 0;
-        
-        if (!rowId || rowId < 2) {
-          Logger.log(`⚠️ Invalid rowId: ${rowId}`);
+        const shortcutId = String(result.shortcutId || "").trim();
+        const rowIdRaw = Number(result.rowId || 0);
+        const suggested = String(result.suggestedCategory || "").trim();
+        const confidence = Number(result.confidence || 0);
+
+        if (!suggested) continue;
+
+        // ✅ Prefer stable shortcutId mapping
+        let targetRow = shortcutId ? idToRow.get(shortcutId) : null;
+
+        // Fallback to rowId if present
+        if (!targetRow && rowIdRaw >= 2) targetRow = rowIdRaw;
+
+        if (!targetRow || targetRow < 2 || targetRow > lastRow) {
+          Logger.log(`⚠️ Invalid target row. shortcutId=${shortcutId}, rowId=${rowIdRaw}`);
+          errorCount++;
           continue;
         }
-        
-        const cell = sheet.getRange(rowId, BRIDGE_CONFIG.CATEGORY_COLUMN);
-        cell.setValue(category);
-        
-        // Color-code by confidence
+
+        const arrIndex = targetRow - 2; // row 2 => index 0
+        catValues[arrIndex][0] = suggested;
+
+        // Color by confidence
         if (confidence < 0.3) {
-          cell.setBackground("#FFE5E5");  // Light red - low confidence
+          catBgs[arrIndex][0] = "#FFE5E5";
           lowConfidenceCount++;
         } else if (confidence < 0.6) {
-          cell.setBackground("#FFF4E5");  // Light orange - medium
+          catBgs[arrIndex][0] = "#FFF4E5";
         } else {
-          cell.setBackground("#E5F5E5");  // Light green - high confidence
+          catBgs[arrIndex][0] = "#E5F5E5";
         }
-        
-        // Add note with confidence + alternatives
+
+        // Note
         let note = `🤖 ML Categorized\n`;
         note += `Confidence: ${(confidence * 100).toFixed(1)}%\n`;
-        
+
         if (result.alternatives && result.alternatives.length > 0) {
           note += `\nAlternatives:\n`;
           for (const alt of result.alternatives) {
-            note += `• ${alt.category} (${(alt.confidence * 100).toFixed(1)}%)\n`;
+            const c = String(alt.category || "").trim();
+            const conf = Number(alt.confidence || 0);
+            if (!c) continue;
+            note += `• ${c} (${(conf * 100).toFixed(1)}%)\n`;
           }
         }
-        
-        cell.setNote(note);
+
+        catNotes[arrIndex][0] = note;
         updateCount++;
-        
+
       } catch (rowError) {
-        Logger.log(`⚠️ Error updating row ${result.rowId}: ${rowError.message}`);
+        Logger.log(`⚠️ Error applying one result: ${rowError.message}`);
         errorCount++;
       }
     }
-    
-    // Archive the results file
-    const archiveName = `results_${Date.now()}.json`;
-    file.setName(archiveName);
-    Logger.log(`📦 Archived results to: ${archiveName}`);
-    
-    const elapsed = ((new Date()) - startTime) / 1000;
-    
+
+    // Write back once (FAST 🚀)
+    catRange.setValues(catValues);
+    catRange.setBackgrounds(catBgs);
+    catRange.setNotes(catNotes);
+
+    // Archive results file safely
+    archiveIfExists_(folder, BRIDGE_CONFIG.RESULTS_FILE, "results_latest_archived");
+
+    const elapsed = (new Date() - startTime) / 1000;
+
     ui.alert(
       `✅ Categorization Import Complete!\n\n` +
       `📊 Updated: ${updateCount} items\n` +
       `⚠️ Low confidence (<30%): ${lowConfidenceCount}\n` +
       `❌ Errors: ${errorCount}\n` +
       `⏱️ Time: ${elapsed.toFixed(2)}s\n\n` +
-      `Processed at: ${data.processedAt || 'Unknown'}\n\n` +
-      `💡 Tip: Review cells with red/orange backgrounds - they may need manual verification.`
+      `Processed at: ${parsed.processedAt || 'Unknown'}\n\n` +
+      `💡 Tip: Review red/orange cells for manual verification 🙂`
     );
-    
+
   } catch (error) {
     Logger.log(`❌ Ingestion error: ${error.toString()}`);
     ui.alert(`❌ Error: ${error.message}`);
     throw error;
+  } finally {
+    lock.releaseLock();
   }
 }
 
@@ -401,47 +574,52 @@ function showBridgeStatus() {
   try {
     const folder = ensureBridgeFolderExists();
     const files = folder.getFiles();
-    
+
     let pendingTasks = null;
     let resultsReady = false;
     let fileList = [];
-    
+
     while (files.hasNext()) {
       const file = files.next();
       const name = file.getName();
       fileList.push(name);
-      
-      if (name === "pending_tasks.json") {
-        const content = JSON.parse(file.getBlob().getDataAsString());
-        pendingTasks = content.totalTasks || content.tasks?.length || 0;
+
+      if (name === BRIDGE_CONFIG.PENDING_FILE) {
+        try {
+          const content = JSON.parse(file.getBlob().getDataAsString());
+          pendingTasks = content.totalTasks || (content.tasks ? content.tasks.length : 0);
+        } catch (e) {
+          pendingTasks = "⚠️ unreadable JSON";
+        }
       }
-      
-      if (name === "results_latest.json") {
+
+      if (name === BRIDGE_CONFIG.RESULTS_FILE) {
         resultsReady = true;
       }
     }
-    
+
     let status = `🌉 Bridge Status\n\n`;
     status += `📁 Folder: ${folder.getName()}\n`;
+    status += `🆔 Folder ID: ${folder.getId()}\n`;
     status += `📄 Files: ${fileList.length}\n\n`;
-    
+
     if (pendingTasks !== null) {
       status += `⏳ Pending Tasks: ${pendingTasks}\n`;
       status += `   (Waiting for Python processing)\n\n`;
     }
-    
+
     if (resultsReady) {
       status += `✅ Results Ready!\n`;
       status += `   Click '📥 Import Results' to apply.\n\n`;
     }
-    
-    if (!pendingTasks && !resultsReady) {
+
+    if (pendingTasks === null && !resultsReady) {
       status += `✨ No pending work.\n`;
       status += `   Click '🚀 Trigger Categorization' to start.\n`;
     }
-    
+
     SpreadsheetApp.getUi().alert(status);
-    
+
   } catch (error) {
     SpreadsheetApp.getUi().alert(`❌ Error: ${error.message}`);
   }
@@ -454,7 +632,6 @@ function showBridgeStatus() {
 
 /**
  * 🎨 Adds Python Bridge menu to spreadsheet
- * Called from onOpen in Code.gs or standalone
  */
 function addBridgeMenu() {
   SpreadsheetApp.getUi()
@@ -467,11 +644,28 @@ function addBridgeMenu() {
     .addToUi();
 }
 
-
 /**
  * Standalone onOpen trigger (if not using main Code.gs menu)
- * Note: If using with main Code.gs, call addBridgeMenu() from there instead
+ * If you already have onOpen in Code.gs, call addBridgeMenu() from there instead 🙂
  */
 function onOpenBridge(e) {
   addBridgeMenu();
+}
+
+
+// ============================================================================
+// SMALL UTILITIES
+// ============================================================================
+
+function unique_(arr) {
+  const seen = new Set();
+  const out = [];
+  for (const v of arr || []) {
+    const s = String(v || "").trim();
+    if (!s) continue;
+    if (seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
 }
