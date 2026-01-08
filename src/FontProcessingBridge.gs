@@ -284,12 +284,17 @@ class FontProcessingBridge {
         }
       }
       
-      // Clear category cache
+      // Clear category cache (safe - checks if class exists first)
       try {
-        const filterManager = new CategoryFilterManager();
-        filterManager.clearCache();
+        if (typeof CategoryFilterManager === 'function') {
+          const filterManager = new CategoryFilterManager();
+          if (filterManager && typeof filterManager.clearCache === 'function') {
+            filterManager.clearCache();
+          }
+        }
       } catch (e) {
-        // Cache clear is optional
+        // Cache clear is optional, log and continue
+        console.warn('⚠️ CategoryFilterManager.clearCache() skipped:', e.message);
       }
       
       // Archive results file

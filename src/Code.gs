@@ -26,6 +26,10 @@ const CFG = {
 
   // ✅ FIX: Snapshot TTL MUST exist (Cache putAll expects an Integer 1..21600)
   SNAPSHOT_TTL_SECONDS: 60 * 5, // 5 minutes 🕔
+  SNAPSHOT_DRIVE_FOLDER_NAME: '_TEM_Snapshots', // Drive fallback folder
+  SNAPSHOT_MAX_DRIVE_FILES: 25, // Keep last N snapshots in Drive
+  SNAPSHOT_CHUNK_SIZE: 90000, // ~100KB safety margin for CacheService
+  SNAPSHOT_CACHE_RETRIES: 2, // Retry count before Drive fallback
 
   // Import constraints
   MAX_IMPORT_ROWS: 10000,
