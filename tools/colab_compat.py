@@ -56,7 +56,9 @@ class ColabCompat:
             backup_folder_name: Name of folder for backups
         """
         self.backup_folder_name = backup_folder_name
-        self.in_colab = 'google.colab' in sys.modules
+        
+        # Robust Colab detection using try/except (fixes OAuth issue)
+        self.in_colab = self._detect_colab()
         self.in_jupyter = 'ipykernel' in sys.modules
         
         # Set up paths based on environment
@@ -71,6 +73,23 @@ class ColabCompat:
             self.backup_path = self.drive_path
         
         self._gc = None  # Cached gspread client
+    
+    @staticmethod
+    def _detect_colab():
+        """
+        Reliably detect if running in Google Colab.
+        
+        Uses try/except import which is more reliable than checking
+        sys.modules (which can fail if google.colab not imported yet).
+        
+        Returns:
+            bool: True if running in Colab, False otherwise
+        """
+        try:
+            import google.colab
+            return True
+        except ImportError:
+            return False
         
     def print_environment(self):
         """Print detected environment info!"""
@@ -209,8 +228,10 @@ class ColabCompat:
             return creds
         
         # Option 4: OAuth flow for user authentication
-        print("\n⚠️ No service account found. Starting OAuth flow...")
-        print("💡 For automated usage, create a service account and save as credentials.json")
+        # Note: This is the normal flow when running interactively!
+        print("\n🔐 Starting interactive OAuth authentication...")
+        print("💡 Tip: For automated/headless usage, create a service account.")
+        print("   Save the JSON key as 'credentials.json' in the project folder.")
         
         try:
             import gspread
