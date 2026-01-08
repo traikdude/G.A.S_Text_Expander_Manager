@@ -1,68 +1,61 @@
 /*
 ╔═══════════════════════════════════════════════════════════════════════════════╗
-║ 🎉 FINAL PART (3 of 3) - PROJECT COMPLETE                                     ║
-║ Lines: 1 to ~70 | Completion: 100%                                            ║
+║ src/cleanup.gs - Administrative Utilities (Revised)                           ║
+║ Fixes:                                                                        ║
+║ 1) Never show UI dialogs while holding a LockService lock 🔒🚫                ║
+║ 2) Fast duplicate removal using rebuild + setValues (no deleteRow loops) 🚀   ║
+║ 3) Safe UI notifications across bound/unbound contexts 🧩                     ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
 */
-// ============================================================================ 
-// FILE: src/cleanup.gs
-// SECTION: Administrative Utilities
-// STATUS: COMPLETE
-// ============================================================================ 
 
 /**
  * 🧹 ONE-TIME CLEANUP TOOL
- * Run this function manually from the editor to remove existing duplicates
- * in the "Favorites" sheet.
- * This function uses the robust, mapping-aware logic to ensure safety.
+ * Run manually to remove exact duplicates in Favorites sheet.
+ * Delegates to favorites.gs internal cleanupDuplicateFavorites_().
  */
 function cleanupDuplicateFavorites() {
-  console.log('--- Starting Favorites Cleanup ---');
-  
+  console.log('--- 🧹 Starting Favorites Cleanup ---');
+
+  let report;
+  let msg;
+
   try {
-    // Call the internal cleanup logic defined in favorites.gs
-    // This logic handles dynamic column mapping and DocumentLocking.
-    const report = cleanupDuplicateFavorites_();
-    
-    const msg = report.removedCount > 0 
-      ? `✅ Cleanup Complete: Removed ${report.removedCount} duplicate entries.`
-      : "✨ No duplicates found. Database is clean.";
-    
+    // ✅ Data ops happen inside favorites.gs and its own locking logic
+    report = cleanupDuplicateFavorites_();
+
+    msg = report.removedCount > 0
+      ? `✅ Cleanup Complete: Removed ${report.removedCount} duplicate favorite entr${report.removedCount === 1 ? 'y' : 'ies'}.`
+      : '✨ No duplicates found. Favorites database is clean.';
+
     console.log(msg);
     console.log(`Initial Row Count: ${report.initialCount}`);
     console.log(`Duplicates Removed: ${report.removedCount}`);
     console.log(`Final Row Count: ${report.finalCount}`);
-    
-    // Provide UI feedback to the user via Message Box
-    try {
-      Browser.msgBox(msg + `\n\nFinal count: ${report.finalCount} unique favorites.`);
-    } catch (e) {
-      // Fallback for non-UI context (e.g. running from clasp/console)
-      console.log('UI notification skipped (not running in bound spreadsheet context).');
-    }
-    
+
+    // ✅ UI feedback (safe)
+    notifyUser_(
+      '⭐ Favorites Cleanup',
+      msg + `\n\nFinal count: ${report.finalCount} unique favorites.`
+    );
+
     return report;
-    
+
   } catch (err) {
-    console.error('Cleanup Failed: ' + err.message);
-    try { 
-      Browser.msgBox("Error during cleanup: " + err.message); 
-    } catch(e) {}
+    console.error('❌ Favorites Cleanup Failed: ' + err.message);
+    notifyUser_('❌ Favorites Cleanup Error', 'Error during cleanup:\n\n' + err.message);
     throw err;
   }
 }
 
 /**
- * ALIAS: runManualCleanup
- * Identical to cleanupDuplicateFavorites, provided for backwards compatibility.
+ * ALIAS: runManualCleanup (Backwards compatibility)
  */
 function runManualCleanup() {
   return cleanupDuplicateFavorites();
 }
 
 /**
- * Utility to verify column mapping.
- * Run this to check if the script correctly identifies your sheet structure.
+ * Utility to verify column mapping for Favorites.
  */
 function debugFavoritesColumns() {
   const sheet = getSheet_(CFG.SHEET_FAVORITES);
@@ -72,6 +65,11 @@ function debugFavoritesColumns() {
   console.log('Current Headers:', header);
   console.log('Mapped Indices:', colMap);
 
+  notifyUser_(
+    '🔎 Favorites Column Map',
+    'Check Logs for full details.\n\nMapped indices:\n' + JSON.stringify(colMap, null, 2)
+  );
+
   return colMap;
 }
 
@@ -80,135 +78,162 @@ function debugFavoritesColumns() {
 // ============================================================================
 
 /**
- * ONE-TIME CLEANUP: Removes all duplicate shortcuts from the "Shortcuts" sheet.
+ * ONE-TIME CLEANUP: Removes duplicate shortcuts from the "Shortcuts" sheet.
  * Keeps the FIRST occurrence of each Snippet Name, removes subsequent duplicates.
- * Run this manually from the Apps Script editor to clean existing duplicates.
+ *
+ * ✅ Revised: Uses rebuild + setValues for speed (no deleteRow loops).
+ * ✅ Revised: Releases lock BEFORE any UI dialogs. 🔒🚫
+ *
+ * @param {Object=} options - Optional { dryRun:boolean, keyMode:string }
+ *   keyMode:
+ *     - 'snippet' (default): uniqueness by Snippet Name
+ *     - 'snippet|application|language': stricter uniqueness
  *
  * @return {Object} Report { initialCount, removedCount, finalCount, duplicateKeys }
  */
-function cleanupDuplicateShortcuts() {
-  console.log('--- Starting Shortcuts Cleanup ---');
+function cleanupDuplicateShortcuts(options) {
+  console.log('--- 🧹 Starting Shortcuts Cleanup ---');
+
+  const opts = normalizeCleanupOptions_(options);
 
   const lock = LockService.getScriptLock();
+  let report;
+  let msg;
 
   try {
     lock.waitLock(30000);
 
     const sheet = getSheet_(CFG.SHEET_SHORTCUTS);
-    const data = sheet.getDataRange().getValues();
+    const lastRow = sheet.getLastRow();
+    const lastCol = sheet.getLastColumn();
 
-    if (data.length <= 1) {
-      const msg = 'No data rows to clean (only header found).';
+    if (lastRow <= 1) {
+      msg = 'ℹ️ No data rows to clean (only header found).';
       console.log(msg);
-      return { initialCount: 0, removedCount: 0, finalCount: 0, duplicateKeys: [] };
+
+      report = { initialCount: 0, removedCount: 0, finalCount: 0, duplicateKeys: [] };
+      return report;
     }
 
+    // Read all values at once ✅
+    const data = sheet.getRange(1, 1, lastRow, lastCol).getValues();
     const header = data[0];
-    const { col } = getShortcutsHeaderAndColMap_(sheet);
+
+    // Validate required headers exist ✅
+    const colMap = indexHeader_(header);
+    if (colMap['Snippet Name'] === undefined || colMap['Content'] === undefined) {
+      throw new Error('Shortcuts sheet is missing required headers (Snippet Name / Content).');
+    }
+
+    const keyColIdx = colMap['Snippet Name'];
+    const appColIdx = colMap['Application']; // may be undefined
+    const langColIdx = colMap['Language'];   // may be undefined
 
     const seen = new Set();
-    const rowsToDelete = [];
     const duplicateKeys = [];
+    const keepRows = [];
+    keepRows.push(header); // keep header
 
-    // Scan for duplicates (keep first occurrence)
+    // Build filtered dataset 🚀
     for (let i = 1; i < data.length; i++) {
-      const key = String(data[i][col.key] || '').trim();
+      const row = data[i];
 
-      if (!key) continue; // Skip empty keys
+      const snippet = String(row[keyColIdx] || '').trim();
+      if (!snippet) continue; // Skip empty keys
 
-      if (seen.has(key)) {
+      const compositeKey = buildShortcutUniqKey_(opts.keyMode, snippet, row, appColIdx, langColIdx);
+
+      if (seen.has(compositeKey)) {
         // Duplicate found
-        rowsToDelete.push(i + 1); // 1-based row index
-        if (!duplicateKeys.includes(key)) {
-          duplicateKeys.push(key);
-        }
-      } else {
-        seen.add(key);
+        if (!duplicateKeys.includes(snippet)) duplicateKeys.push(snippet);
+        continue;
       }
+
+      seen.add(compositeKey);
+      keepRows.push(row);
     }
 
-    // Delete duplicates (bottom-up to preserve indices)
-    rowsToDelete.sort((a, b) => b - a);
-    for (let i = 0; i < rowsToDelete.length; i++) {
-      sheet.deleteRow(rowsToDelete[i]);
-    }
+    const initialCount = data.length - 1;
+    const finalCount = keepRows.length - 1;
+    const removedCount = initialCount - finalCount;
 
-    // Invalidate cache after cleanup
-    if (rowsToDelete.length > 0) {
-      bumpCacheVersion_();
-      invalidateShortcutsCache_();
-    }
-
-    const report = {
-      initialCount: data.length - 1,
-      removedCount: rowsToDelete.length,
-      finalCount: (data.length - 1) - rowsToDelete.length,
+    report = {
+      initialCount: initialCount,
+      removedCount: removedCount,
+      finalCount: finalCount,
       duplicateKeys: duplicateKeys
     };
 
-    const msg = report.removedCount > 0
-      ? `Cleanup Complete: Removed ${report.removedCount} duplicate shortcuts.`
-      : 'No duplicates found. Shortcuts sheet is clean.';
+    if (opts.dryRun) {
+      msg = removedCount > 0
+        ? `🧪 DRY RUN: Would remove ${removedCount} duplicate shortcut row${removedCount === 1 ? '' : 's'}.`
+        : '🧪 DRY RUN: No duplicates found. Shortcuts sheet is clean.';
+      console.log(msg);
+      console.log(`Initial Row Count: ${report.initialCount}`);
+      console.log(`Duplicates Would Remove: ${report.removedCount}`);
+      console.log(`Final Row Count Would Be: ${report.finalCount}`);
+      if (duplicateKeys.length > 0) console.log(`Duplicate Snippet Names: ${duplicateKeys.join(', ')}`);
+      return report;
+    }
+
+    // Write back in one shot ✅🚀
+    rewriteSheetValuesPreserveFormatting_(sheet, keepRows);
+
+    // Invalidate cache after cleanup ✅
+    if (removedCount > 0) {
+      try { bumpCacheVersion_(); } catch (e) {}
+      try { invalidateShortcutsCache_(); } catch (e) {}
+    }
+
+    msg = removedCount > 0
+      ? `✅ Cleanup Complete: Removed ${removedCount} duplicate shortcut row${removedCount === 1 ? '' : 's'}.`
+      : '✨ No duplicates found. Shortcuts sheet is clean.';
 
     console.log(msg);
     console.log(`Initial Row Count: ${report.initialCount}`);
     console.log(`Duplicates Removed: ${report.removedCount}`);
     console.log(`Final Row Count: ${report.finalCount}`);
-    if (duplicateKeys.length > 0) {
-      console.log(`Duplicate Keys: ${duplicateKeys.join(', ')}`);
-    }
-
-    // UI feedback
-    try {
-      Browser.msgBox(
-        'Shortcuts Cleanup',
-        msg + `\\n\\nDetails:\\n- Initial: ${report.initialCount} rows\\n- Removed: ${report.removedCount} duplicates\\n- Final: ${report.finalCount} rows`,
-        Browser.Buttons.OK
-      );
-    } catch (e) {
-      console.log('UI notification skipped (not running in bound spreadsheet context).');
-    }
+    if (duplicateKeys.length > 0) console.log(`Duplicate Snippet Names: ${duplicateKeys.join(', ')}`);
 
     return report;
 
   } catch (err) {
-    console.error('Shortcuts Cleanup Failed: ' + err.message);
-    try {
-      Browser.msgBox('Error', 'Cleanup failed: ' + err.message, Browser.Buttons.OK);
-    } catch (e) {}
+    console.error('❌ Shortcuts Cleanup Failed: ' + err.message);
     throw err;
+
   } finally {
+    // ✅ ALWAYS release lock ASAP 🔒
     lock.releaseLock();
   }
 }
 
 /**
- * MASTER CLEANUP: Cleans both Shortcuts and Favorites sheets.
- * Run this once to ensure your entire database is duplicate-free.
+ * MASTER CLEANUP: Cleans both Shortcuts and Favorites.
  */
 function cleanupAllDuplicates() {
-  console.log('=== MASTER CLEANUP STARTED ===');
+  console.log('=== 🧹 MASTER CLEANUP STARTED ===');
 
-  let shortcutsReport, favoritesReport;
+  let shortcutsReport;
+  let favoritesReport;
 
   try {
     console.log('Step 1: Cleaning Shortcuts...');
-    shortcutsReport = cleanupDuplicateShortcuts();
+    shortcutsReport = cleanupDuplicateShortcuts({ dryRun: false, keyMode: 'snippet' });
 
     console.log('Step 2: Cleaning Favorites...');
     favoritesReport = cleanupDuplicateFavorites();
 
-    const totalRemoved = shortcutsReport.removedCount + favoritesReport.removedCount;
-    const msg = totalRemoved > 0
-      ? `Master Cleanup Complete!\\n\\nShortcuts: ${shortcutsReport.removedCount} duplicates removed\\nFavorites: ${favoritesReport.removedCount} duplicates removed`
-      : 'No duplicates found in either sheet. Database is clean!';
+    const totalRemoved = (shortcutsReport.removedCount || 0) + (favoritesReport.removedCount || 0);
 
-    console.log('=== MASTER CLEANUP COMPLETE ===');
+    const msg = totalRemoved > 0
+      ? `✅ Master Cleanup Complete!\n\nShortcuts: ${shortcutsReport.removedCount} removed\nFavorites: ${favoritesReport.removedCount} removed`
+      : '✨ No duplicates found in either sheet. Database is clean!';
+
+    console.log('=== ✅ MASTER CLEANUP COMPLETE ===');
     console.log(`Total duplicates removed: ${totalRemoved}`);
 
-    try {
-      Browser.msgBox('Master Cleanup', msg, Browser.Buttons.OK);
-    } catch (e) {}
+    // ✅ UI feedback (safe) — IMPORTANT: no locks are held here
+    notifyUser_('🧼 Master Cleanup', msg);
 
     return {
       shortcuts: shortcutsReport,
@@ -217,29 +242,91 @@ function cleanupAllDuplicates() {
     };
 
   } catch (err) {
-    console.error('Master Cleanup Failed: ' + err.message);
+    console.error('❌ Master Cleanup Failed: ' + err.message);
+    notifyUser_('❌ Master Cleanup Error', err.message);
     throw err;
   }
 }
 
-/*
-╔═══════════════════════════════════════════════════════════════════════════════╗
-║ ✅ DELIVERY COMPLETE - ALL FILES PROVIDED                                     ║
-╚═══════════════════════════════════════════════════════════════════════════════╝
-📦 COMPLETE FILE INVENTORY:
-✅ src/favorites.gs (Refactored Unified Logic)
-✅ src/uiHandlers.gs (Delegation Update)
-✅ src/cleanup.gs (Admin Tools)
+// ============================================================================
+// INTERNAL HELPERS
+// ============================================================================
 
-🎯 DEPLOYMENT CHECKLIST:
-1. Run 'clasp push' to update your Google Apps Script project.
-2. In the Apps Script Editor, select 'cleanupDuplicateFavorites' and click 'Run'.
-3. Verify the "Favorites" sheet is now clean.
-4. Test the Web App toggle and "Copy" actions — duplicates are now impossible.
+/**
+ * Safe UI notifier: uses Spreadsheet UI if available, else logs only.
+ * UI only works for container-bound scripts in an active editor session.
+ * Also avoids suspending script mid-lock by being called only after locks are released.
+ */
+function notifyUser_(title, message) {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    ui.alert(String(title || 'Notice'), String(message || ''), ui.ButtonSet.OK);
+  } catch (e) {
+    console.log(`(UI skipped) ${title}: ${message}`);
+  }
+}
 
-🚀 YOUR 4 POST-DELIVERY OPTIONS:
-1️⃣ VERIFY → Run 'clasp run cleanupDuplicateFavorites' to clean the sheet via CLI
-2️⃣ TEST → Generate a race-condition simulation script to prove the fix
-3️⃣ DOCUMENT → Generate a technical README for these changes
-4️⃣ NEXT → Move to the 'gas-to-python-migration' task
-*/
+/**
+ * Normalize cleanup options.
+ */
+function normalizeCleanupOptions_(options) {
+  const o = options || {};
+  return {
+    dryRun: !!o.dryRun,
+    keyMode: String(o.keyMode || 'snippet')
+  };
+}
+
+/**
+ * Build uniqueness key based on selected mode.
+ */
+function buildShortcutUniqKey_(mode, snippet, row, appColIdx, langColIdx) {
+  if (mode === 'snippet|application|language') {
+    const app = appColIdx !== undefined ? String(row[appColIdx] || '').trim() : '';
+    const lang = langColIdx !== undefined ? String(row[langColIdx] || '').trim() : '';
+    return `${snippet}||${app}||${lang}`;
+  }
+  // default 'snippet'
+  return snippet;
+}
+
+/**
+ * Rewrite sheet values while preserving formatting/validations as much as possible.
+ * Strategy:
+ * - Clear contents in used range
+ * - Write new values
+ * - Clear leftover rows (if any) to avoid ghost data
+ */
+function rewriteSheetValuesPreserveFormatting_(sheet, values2d) {
+  const newRowCount = values2d.length;
+  const newColCount = values2d[0].length;
+
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+
+  // Clear only contents, not formatting 🎨
+  if (lastRow > 0 && lastCol > 0) {
+    sheet.getRange(1, 1, lastRow, lastCol).clearContent();
+  }
+
+  // Write new dataset ✅
+  sheet.getRange(1, 1, newRowCount, newColCount).setValues(values2d);
+
+  // If old range bigger, clear the rest 🧹
+  if (lastRow > newRowCount) {
+    sheet.getRange(newRowCount + 1, 1, lastRow - newRowCount, lastCol).clearContent();
+  }
+}
+
+/**
+ * Quick debug helper: preview duplicate removal without making changes.
+ * (Optional convenience)
+ */
+function previewDuplicateShortcutsCleanup() {
+  const report = cleanupDuplicateShortcuts({ dryRun: true, keyMode: 'snippet' });
+  notifyUser_(
+    '🧪 Preview Shortcuts Cleanup',
+    `Initial: ${report.initialCount}\nWould Remove: ${report.removedCount}\nFinal: ${report.finalCount}\n\n(See logs for duplicate keys)`
+  );
+  return report;
+}
