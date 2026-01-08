@@ -304,51 +304,10 @@ function fetchNextShortcutsPageHandler(snapshotToken, offset, limit) {
 // ============================================================================
 // TRIGGERS & ENTRY POINTS
 // ============================================================================
+// NOTE: onOpen() and onInstall() are now in 00_ProjectEntryPoints.gs
+// The TEM menu is built by TEM_onOpen_() in 05_TextExpander_EntryPoints_Revised.gs
+// ============================================================================
 
-function onOpen(e) {
-  ensureSheets_();
-  const ui = SpreadsheetApp.getUi();
-
-  ui.createMenu('📝 Text Expansion Tools')
-    .addItem('🚀 Open Manager (Sidebar)', 'openManagerSidebar')
-    .addItem('🖼️ Open Manager (Dialog)', 'openManagerDialog')
-    .addSeparator()
-    .addSubMenu(ui.createMenu('🐍 Python Tools (Colab)')
-      .addItem('🧠 Run ML Categorizer', 'openMLCategorizer')
-      .addItem('🛡️ Run Data Quality Check', 'openDataQuality')
-      .addItem('👯 Run Duplicate Finder', 'openDuplicateFinder')
-      .addItem('📊 Run Analytics', 'openAnalytics')
-      .addSeparator()
-      .addItem('💾 Run Backup System', 'openBackupSystem')
-      .addItem('🌉 Run Drive Bridge', 'openDriveBridge')
-      .addItem('✨ Run Font Categorizer', 'openFontCategorizer')
-      .addSeparator()
-      .addItem('📂 Open Tools Folder', 'openToolsFolder')
-    )
-    .addSeparator()
-    .addItem('🌐 Open Web App (New Tab)', 'openWebAppLinkDialog')
-    .addSeparator()
-    .addItem('🔄 Warm Cache (10k+)', 'warmShortcutsCache')
-    .addItem('🗑️ Invalidate Cache', 'invalidateShortcutsCache')
-    .addSeparator()
-    .addSubMenu(ui.createMenu('🧹 Cleanup')
-      .addItem('📋 Cleanup Shortcuts Only', 'cleanupDuplicateShortcuts')
-      .addItem('⭐ Cleanup Favorites Only', 'cleanupDuplicateFavorites')
-      .addItem('🧼 Cleanup Both', 'cleanupAllDuplicates')
-    )
-    .addSeparator()
-    .addSubMenu(ui.createMenu('🔽 Dropdown Setup')
-      .addItem('✅ Add Enhanced Dropdowns', 'addEnhancedDropdowns')
-      .addItem('🧹 Remove Dropdown Validations', 'removeEnhancedDropdowns')
-    )
-    .addSeparator()
-    .addItem('📘 About / Help', 'openTextExpanderHelpDialog')
-    .addToUi();
-}
-
-function onInstall(e) {
-  onOpen(e);
-}
 
 function openManagerSidebar() {
   ensureSheets_();
