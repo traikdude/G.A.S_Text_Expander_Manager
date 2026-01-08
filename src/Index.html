@@ -2116,6 +2116,46 @@
     }
 
     /**
+     * Rebuild the "Type" (Description) filter chips dynamically from loaded shortcuts ✅
+     * Works for Web App + Modal + Sidebar because all surfaces use Index.html 🧩
+     */
+    function TEM_rebuildTypeFilterChips(shortcuts) {
+      const container = el('typeFilters');
+      if (!container) return;
+
+      // Collect unique description values
+      const set = new Set();
+      (shortcuts || []).forEach(s => {
+        const d = (s && s.description) ? String(s.description).trim() : '';
+        if (d) set.add(d.toLowerCase()); // normalize to lowercase for consistency
+      });
+
+      const values = Array.from(set).sort((a, b) => a.localeCompare(b));
+
+      // Helper to create a chip
+      const mkChip = (value, label, active) => {
+        const div = document.createElement('div');
+        div.className = 'chip' + (active ? ' active' : '');
+        div.dataset.filter = value;
+        div.dataset.filterType = 'type';
+        div.textContent = label;
+        return div;
+      };
+
+      // Clear & rebuild
+      container.innerHTML = '<span class="filter-label">Type:</span>';
+      container.appendChild(mkChip('all', '📁 All', true));
+
+      values.forEach(v => {
+        // Pretty label: Title Case
+        const pretty = v.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        container.appendChild(mkChip(v, '🏷️ ' + pretty, false));
+      });
+
+      console.log(`✅ Rebuilt ${values.length} Type filter chips from data`);
+    }
+
+    /**
      * Renders dynamic category filter chips based on loaded data
      */
     function renderCategoryFilters() {
@@ -2658,6 +2698,8 @@
       setupEventDelegation();
       setupFilterDelegation();  // Set up filter chip and search delegation
       renderCategoryFilters();  // 🔥 Dynamic Category Generation
+      renderStyleFilters();     // 🔤 Dynamic Style Generation
+      TEM_rebuildTypeFilterChips(state.shortcuts); // 🏷️ Dynamic Type (Description) Chips
       updateFilterCount();      // Initialize filter count display
     }
 

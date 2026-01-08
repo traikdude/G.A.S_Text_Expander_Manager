@@ -53,6 +53,7 @@ const CFG = {
     BACKUP_SYSTEM: 'https://colab.research.google.com/github/traikdude/G.A.S_Text_Expander_Manager/blob/master/notebooks/BackupSystem.ipynb',
     DRIVE_BRIDGE: 'https://colab.research.google.com/github/traikdude/G.A.S_Text_Expander_Manager/blob/master/notebooks/DriveCategorizerBridge.ipynb',
     FONT_CATEGORIZER: 'https://colab.research.google.com/github/traikdude/G.A.S_Text_Expander_Manager/blob/master/notebooks/FontAwareCategorizer.ipynb',
+    TEXT_EXPANDER_CATEGORIZER: 'https://colab.research.google.com/github/traikdude/G.A.S_Text_Expander_Manager/blob/master/notebooks/TextExpanderCategorizer.ipynb',
     FOLDER: 'https://drive.google.com/drive/u/0/my-drive'
   }
 };
@@ -335,6 +336,13 @@ function onOpen(e) {
       .addItem('⭐ Cleanup Favorites Only', 'cleanupDuplicateFavorites')
       .addItem('🧼 Cleanup Both', 'cleanupAllDuplicates')
     )
+    .addSeparator()
+    .addSubMenu(ui.createMenu('🔽 Dropdown Setup')
+      .addItem('✅ Add Enhanced Dropdowns', 'addEnhancedDropdowns')
+      .addItem('🧹 Remove Dropdown Validations', 'removeEnhancedDropdowns')
+    )
+    .addSeparator()
+    .addItem('📘 About / Help', 'openTextExpanderHelpDialog')
     .addToUi();
 }
 
