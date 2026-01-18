@@ -108,7 +108,13 @@ function addEnhancedDropdowns() {
 
   applyDropdownValidations_(sh, optionsSheet);
 
-  SpreadsheetApp.getUi().alert("✅ Dropdowns updated!\n\nIncludes: Description + Category dropdowns 🎉");
+  // 🛡️ SAFE UI: Only show alert if UI is available
+  const msg = "✅ Dropdowns updated!\n\nIncludes: Description + Category dropdowns 🎉";
+  try {
+    SpreadsheetApp.getUi().alert(msg);
+  } catch (e) {
+    console.log(msg.replace(/\n/g, ' '));
+  }
 }
 
 /**
@@ -117,8 +123,10 @@ function addEnhancedDropdowns() {
 function removeEnhancedDropdowns() {
   const ss = SpreadsheetApp.getActive();
   const sh = ss.getSheetByName(DROPDOWN_ENH_SHEET.SHORTCUTS);
+  
   if (!sh) {
-    SpreadsheetApp.getUi().alert("⚠️ 'Shortcuts' sheet not found.");
+    const msg = "⚠️ 'Shortcuts' sheet not found.";
+    try { SpreadsheetApp.getUi().alert(msg); } catch(e) { console.warn(msg); }
     return;
   }
 
@@ -130,7 +138,12 @@ function removeEnhancedDropdowns() {
     rng.clearDataValidations();
   });
 
-  SpreadsheetApp.getUi().alert("🧹 Dropdown validations removed (data kept).");
+  const msg = "🧹 Dropdown validations removed (data kept).";
+  try {
+    SpreadsheetApp.getUi().alert(msg);
+  } catch (e) {
+    console.log(msg);
+  }
 }
 
 /**

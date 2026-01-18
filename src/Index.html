@@ -1141,9 +1141,9 @@
     }
 
     /* * 🐛 FIX FOR FROZEN FIRST ITEM
-     * The fixed header (search bar/tabs) was covering the top of the list.
-     * We add padding to the top of the scroll container to push the content down.
-     */
+       * The fixed header (search bar/tabs) was covering the top of the list.
+       * We add padding to the top of the scroll container to push the content down.
+       */
     .top-bar {
       z-index: 1000;
       position: fixed;
@@ -1183,8 +1183,8 @@
       padding: 12px 16px;
       border-top: 1px solid rgba(255, 255, 255, 0.2);
       /* NOTE: Alternative - use header gradient match:
-         background: linear-gradient(135deg, rgba(102,126,234,0.95) 0%, rgba(118,75,162,0.95) 100%);
-      */
+          background: linear-gradient(135deg, rgba(102,126,234,0.95) 0%, rgba(118,75,162,0.95) 100%);
+       */
     }
 
     /* Search filter container - no longer sticky, transparent in header */
@@ -1221,14 +1221,13 @@
       font-weight: 600;
     }
 
-    /* 
-     * Filter chips - let original colorful styles apply!
-     * Original styles from lines 277-325 provide:
-     * - Default blue chips: #e8f0fe / #1a73e8
-     * - Spanish (🇪🇸): red tones #fce8e6 / #d93025  
-     * - English (🇺🇸): green tones #e6f4ea / #137333
-     * We only need to ensure label visibility, not override chip colors
-     */
+    /* * Filter chips - let original colorful styles apply!
+      * Original styles from lines 277-325 provide:
+      * - Default blue chips: #e8f0fe / #1a73e8
+      * - Spanish (🇪🇸): red tones #fce8e6 / #d93025  
+      * - English (🇺🇸): green tones #e6f4ea / #137333
+      * We only need to ensure label visibility, not override chip colors
+      */
 
     .search-section .filter-result-count {
       background: #e8f0fe;
@@ -1292,7 +1291,7 @@
       }
 
       /* NOTE: Alternative approach - filters start EXPANDED on mobile
-         Remove .collapsed class from initial HTML if user prefers this */
+          Remove .collapsed class from initial HTML if user prefers this */
 
       /* FEATURE 1: Mobile responsive pagination */
       .pagination-controls {
@@ -3715,4 +3714,4 @@ sig,"Best regards,\nJohn Doe",Email,Email signature,en,signature`;
   </script>
 </body>
 
-</html>
+</html> ""

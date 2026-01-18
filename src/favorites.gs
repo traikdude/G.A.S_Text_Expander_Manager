@@ -1,7 +1,7 @@
 /*
 ╔═══════════════════════════════════════════════════════════════════════════════╗
-║ PART 1 of 3: src/favorites.gs - Core Logic Unification                        ║
-║ Lines: 1 to ~200 | Completion: 33%                                            ║
+║ src/favorites.gs - Core Logic Unification                                     ║
+║ Status: COMPLETE                                                              ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
 */
 // ============================================================================
@@ -32,7 +32,20 @@ function listMyFavorites_() {
   lock.waitLock(10000);
 
   try {
-    const favSheet = getSheet_(CFG.SHEET_FAVORITES);
+    // Ensure sheet exists via CFG (assumes Code.gs config is loaded)
+    const sheetName = (typeof CFG !== 'undefined' && CFG.SHEET_FAVORITES) ? CFG.SHEET_FAVORITES : 'Favorites';
+    
+    // Safety check for getSheet_ helper
+    let favSheet;
+    try {
+        favSheet = getSheet_(sheetName);
+    } catch(e) {
+        // Fallback if helper missing or sheet missing
+        const ss = SpreadsheetApp.getActiveSpreadsheet();
+        favSheet = ss.getSheetByName(sheetName);
+        if (!favSheet) return [];
+    }
+
     const data = favSheet.getDataRange().getValues();
     if (data.length <= 1) return [];
     
@@ -77,12 +90,27 @@ function listMyFavorites_() {
  * @return {Object} Column indices.
  */
 function getFavoritesColumnMap_(header) {
-  const idx = indexHeader_(header);
+  // Use global helper if available, or local implementation
+  const idx = (typeof indexHeader_ === 'function') ? indexHeader_(header) : indexHeaderLocal_(header);
+  
+  // Flexible matching for column names
+  const emailIdx = idx['UserEmail'] !== undefined ? idx['UserEmail'] : idx['Email'];
+  const nameIdx = idx['Snippet Name'] !== undefined ? idx['Snippet Name'] : idx['Snippet'];
+  
   return {
-    userEmail: idx['UserEmail'],
-    key: idx['Snippet Name'],
-    createdAt: idx['CreatedAt'],
+    userEmail: emailIdx !== undefined ? emailIdx : 0,
+    key: nameIdx !== undefined ? nameIdx : 1,
+    createdAt: idx['CreatedAt'] !== undefined ? idx['CreatedAt'] : 2,
   };
+}
+
+// Local helper in case global is missing during standalone testing
+function indexHeaderLocal_(headerRow) {
+  const map = {};
+  headerRow.forEach((h, i) => {
+    if (h) map[String(h)] = i;
+  });
+  return map;
 }
 
 // ============================================================================
@@ -93,8 +121,7 @@ function getFavoritesColumnMap_(header) {
  * Master function to update favorite status.
  * Handles both Toggling and Forcing (Set/Add/Remove).
  * AUTO-HEALS duplicates by deleting all matches before adding (if needed).
- * 
- * @param {string} snippetName - The shortcut key.
+ * * @param {string} snippetName - The shortcut key.
  * @param {Object} options - { mode: 'toggle'|'force_add'|'force_remove' }
  * @return {Object} result - { status: 'added'|'removed'|'unchanged'|'error', snippet: snippetName }
  */
@@ -110,8 +137,9 @@ function updateFavoriteStatus_(snippetName, options = { mode: 'toggle' }) {
     };
   }
   
+  const sheetName = (typeof CFG !== 'undefined' && CFG.SHEET_FAVORITES) ? CFG.SHEET_FAVORITES : 'Favorites';
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(CFG.SHEET_FAVORITES);
+  const sheet = ss.getSheetByName(sheetName);
   
   if (!sheet) {
     console.error('[updateFavoriteStatus_] Favorites sheet not found');
@@ -133,10 +161,11 @@ function updateFavoriteStatus_(snippetName, options = { mode: 'toggle' }) {
     
     // Ensure headers exist if sheet is empty
     if (data.length === 0) {
-      sheet.appendRow(HEADERS_FAVORITES);
+      const headers = ['UserEmail', 'Snippet Name', 'CreatedAt'];
+      sheet.appendRow(headers);
     }
     
-    const header = data.length > 0 ? data[0] : HEADERS_FAVORITES;
+    const header = data.length > 0 ? data[0] : ['UserEmail', 'Snippet Name', 'CreatedAt'];
     const col = getFavoritesColumnMap_(header);
     
     const targetEmail = String(userEmail || '').trim();
@@ -211,7 +240,7 @@ function updateFavoriteStatus_(snippetName, options = { mode: 'toggle' }) {
     
     // Add if needed
     if (shouldAdd) {
-      sheet.appendRow([userEmail, targetKey, new Date().toISOString()]);
+      sheet.appendRow([targetEmail, targetKey, new Date().toISOString()]);
     }
     
     return { status: resultStatus, snippet: targetKey };
@@ -260,7 +289,12 @@ function removeFavorite(snippetName) {
 function removeFavoriteForAllUsers_(key) {
   const k = String(key || '').trim();
   if (!k) return;
-  const sheet = getSheet_(CFG.SHEET_FAVORITES);
+  
+  const sheetName = (typeof CFG !== 'undefined' && CFG.SHEET_FAVORITES) ? CFG.SHEET_FAVORITES : 'Favorites';
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) return;
+  
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return;
 
@@ -292,7 +326,12 @@ function cleanupDuplicateFavorites_() {
   lock.waitLock(30000);
   
   try {
-    const sheet = getSheet_(CFG.SHEET_FAVORITES);
+    const sheetName = (typeof CFG !== 'undefined' && CFG.SHEET_FAVORITES) ? CFG.SHEET_FAVORITES : 'Favorites';
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(sheetName);
+    
+    if (!sheet) return { initialCount: 0, removedCount: 0, finalCount: 0 };
+    
     const data = sheet.getDataRange().getValues();
     if (data.length <= 1) return { initialCount: 0, removedCount: 0, finalCount: 0 };
     
@@ -334,18 +373,3 @@ function cleanupDuplicateFavorites_() {
     lock.releaseLock();
   }
 }
-
-/*
-╔═══════════════════════════════════════════════════════════════════════════════╗
-║ END OF PART 1                                                                 ║
-║ Next: Part 2 will update uiHandlers.gs to use this new logic.                 ║
-║ Progress: ██████░░░░ 33%                                                      ║
-╚═══════════════════════════════════════════════════════════════════════════════╝
-🎯 WHAT'S NEXT:
-Reply "CONTINUE" for Part 2.
-🚀 YOUR 4 NAVIGATION OPTIONS:
-1️⃣ CONTINUE → Proceed to Part 2 (update uiHandlers.gs)
-2️⃣ REVIEW → Check the unified logic in Part 1
-3️⃣ MODIFY → Change how duplicates are handled
-4️⃣ EXPLAIN → Why 'force_add' logic was chosen
-*/

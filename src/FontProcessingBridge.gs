@@ -1,13 +1,11 @@
 /**
- * Font Processing Bridge v2.0
- * 
- * Connects Google Apps Script with Python font categorizer.
+ * Font Processing Bridge v2.1 (Fixed UI Context)
+ * * Connects Google Apps Script with Python font categorizer.
  * Handles data transfer, triggering categorization, and syncing results.
  * Extends the existing ColabBridge with font-specific processing.
- * 
- * @author G.A.S Text Expander Manager Team
- * @version 2.0
- * @since 2025-12-30
+ * * @author G.A.S Text Expander Manager Team
+ * @version 2.1
+ * @since 2025-01-17
  */
 
 const FONT_BRIDGE_CONFIG = {
@@ -47,8 +45,7 @@ class FontProcessingBridge {
   /**
    * Trigger Python font categorization for Shortcuts sheet
    * Creates a task file for the FontAwareCategorizer.py to process
-   * 
-   * @param {boolean} fullReprocess - If true, reprocess all rows; otherwise only new ones
+   * * @param {boolean} fullReprocess - If true, reprocess all rows; otherwise only new ones
    * @returns {Object} Processing result summary
    */
   triggerFontCategorization(fullReprocess = false) {
@@ -60,9 +57,12 @@ class FontProcessingBridge {
       });
       
       // Get shortcuts data
-      const shortcutsSheet = this.spreadsheet.getSheetByName(CFG.SHEET_SHORTCUTS);
+      // Ensure CFG is available or fallback
+      const sheetName = (typeof CFG !== 'undefined' && CFG.SHEET_SHORTCUTS) ? CFG.SHEET_SHORTCUTS : 'Shortcuts';
+      const shortcutsSheet = this.spreadsheet.getSheetByName(sheetName);
+      
       if (!shortcutsSheet) {
-        throw new Error('Shortcuts sheet not found');
+        throw new Error(`Shortcuts sheet "${sheetName}" not found`);
       }
       
       const lastRow = shortcutsSheet.getLastRow();
@@ -81,8 +81,12 @@ class FontProcessingBridge {
       let startRow = 2;
       if (!fullReprocess && mainCatIdx >= 0) {
         // Find first row without MainCategory value
-        const categoryColumn = shortcutsSheet.getRange(2, mainCatIdx + 1, lastRow - 1, 1).getValues();
-        const firstEmptyIndex = categoryColumn.findIndex(row => !row[0] || row[0].toString().trim() === '');
+        // Note: Ideally check FontStyle column, but MainCategory is often processed together
+        const fontStyleIdx = headers.indexOf('FontStyle');
+        const checkIdx = fontStyleIdx >= 0 ? fontStyleIdx : mainCatIdx;
+        
+        const checkColumn = shortcutsSheet.getRange(2, checkIdx + 1, lastRow - 1, 1).getValues();
+        const firstEmptyIndex = checkColumn.findIndex(row => !row[0] || row[0].toString().trim() === '');
         startRow = firstEmptyIndex >= 0 ? firstEmptyIndex + 2 : lastRow + 1;
       }
       
@@ -123,7 +127,7 @@ class FontProcessingBridge {
         timestamp: new Date().toISOString(),
         spreadsheetId: this.spreadsheet.getId(),
         spreadsheetName: this.spreadsheet.getName(),
-        sheetName: CFG.SHEET_SHORTCUTS,
+        sheetName: sheetName,
         processingMode: fullReprocess ? 'full' : 'incremental',
         totalTasks: shortcuts.length,
         tasks: shortcuts
@@ -133,10 +137,16 @@ class FontProcessingBridge {
       const folder = this._getBridgeFolder();
       const fileName = 'font_categorization_tasks.json';
       
-      // Remove existing file if present
+      // Remove existing file if present (using trash for safety/permissions compatibility)
       const existingFiles = folder.getFilesByName(fileName);
       while (existingFiles.hasNext()) {
-        existingFiles.next().setTrashed(true);
+        try {
+            existingFiles.next().setTrashed(true);
+        } catch (e) {
+            // If trash fails (e.g. shared drive permissions), try renaming
+            const f = existingFiles.next();
+            f.setName(`archived_${Date.now()}_${fileName}`);
+        }
       }
       
       const file = folder.createFile(
@@ -153,16 +163,21 @@ class FontProcessingBridge {
         elapsed: elapsed
       });
       
-      SpreadsheetApp.getUi().alert(
-        `🚀 Font Categorization Queued!\n\n` +
+      // 🛡️ SAFE UI: Only show alert if UI is available
+      const msg = `🚀 Font Categorization Queued!\n\n` +
         `📝 Items queued: ${shortcuts.length}\n` +
         `📁 File: ${fileName}\n` +
         `⏱️ Time: ${elapsed.toFixed(2)}s\n\n` +
         `Next Steps:\n` +
         `1. Open Google Colab\n` +
         `2. Run FontAwareCategorizer.py\n` +
-        `3. Return here and click '📥 Import Font Results'`
-      );
+        `3. Return here and click '📥 Import Font Results'`;
+
+      try {
+        SpreadsheetApp.getUi().alert(msg);
+      } catch (uiErr) {
+        console.log('[UI Skipped] ' + msg.replace(/\n/g, ' '));
+      }
       
       return {
         success: true,
@@ -173,7 +188,14 @@ class FontProcessingBridge {
       
     } catch (error) {
       this.logger.error('triggerFontCategorization', error);
-      SpreadsheetApp.getUi().alert(`❌ Error: ${error.message}`);
+      
+      // 🛡️ SAFE UI: Only show error alert if UI available
+      try {
+        SpreadsheetApp.getUi().alert(`❌ Error: ${error.message}`);
+      } catch (uiErr) {
+         console.error('[UI Skipped] Error alert:', error.message);
+      }
+
       return {
         success: false,
         error: error.message,
@@ -188,21 +210,16 @@ class FontProcessingBridge {
    */
   importFontResults() {
     const startTime = new Date();
-    const ui = SpreadsheetApp.getUi();
     
     try {
       const folder = this._getBridgeFolder();
       const files = folder.getFilesByName('font_categorization_results.json');
       
       if (!files.hasNext()) {
-        ui.alert(
-          "⏳ No Results Found\n\n" +
-          "The font_categorization_results.json file doesn't exist yet.\n\n" +
-          "Please:\n" +
-          "1. Open Google Colab\n" +
-          "2. Run the FontAwareCategorizer.py script\n" +
-          "3. Try this import again"
-        );
+        const msg = "⏳ No Results Found. The font_categorization_results.json file doesn't exist yet.";
+        try {
+            SpreadsheetApp.getUi().alert(msg);
+        } catch(e) { console.log(msg); }
         return { success: false, message: 'No results file found' };
       }
       
@@ -215,12 +232,16 @@ class FontProcessingBridge {
       }
       
       if (!data.results || data.results.length === 0) {
-        ui.alert("⚠️ Results file exists but contains no categorizations.");
+        const msg = "⚠️ Results file exists but contains no categorizations.";
+        try { SpreadsheetApp.getUi().alert(msg); } catch(e) { console.log(msg); }
         return { success: false, message: 'Empty results' };
       }
       
       // Get the sheet and headers
-      const sheet = this.spreadsheet.getSheetByName(CFG.SHEET_SHORTCUTS);
+      const sheetName = (typeof CFG !== 'undefined' && CFG.SHEET_SHORTCUTS) ? CFG.SHEET_SHORTCUTS : 'Shortcuts';
+      const sheet = this.spreadsheet.getSheetByName(sheetName);
+      if (!sheet) throw new Error(`Sheet "${sheetName}" not found`);
+
       const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
       
       // Find or create required columns
@@ -303,13 +324,17 @@ class FontProcessingBridge {
       
       const elapsed = ((new Date()) - startTime) / 1000;
       
-      ui.alert(
-        `✅ Font Categorization Import Complete!\n\n` +
+      const msg = `✅ Font Categorization Import Complete!\n\n` +
         `📊 Updated: ${updateCount} items\n` +
         `⚠️ Low confidence (<30%): ${lowConfidenceCount}\n` +
         `⏱️ Time: ${elapsed.toFixed(2)}s\n\n` +
-        `💡 Tip: Review cells with red/orange backgrounds.`
-      );
+        `💡 Tip: Review cells with red/orange backgrounds.`;
+        
+      try {
+        SpreadsheetApp.getUi().alert(msg);
+      } catch (e) {
+        console.log(msg.replace(/\n/g, ' '));
+      }
       
       return {
         success: true,
@@ -319,7 +344,7 @@ class FontProcessingBridge {
       
     } catch (error) {
       this.logger.error('importFontResults', error);
-      ui.alert(`❌ Error: ${error.message}`);
+      try { SpreadsheetApp.getUi().alert(`❌ Error: ${error.message}`); } catch(e) {}
       return { success: false, error: error.message };
     }
   }
@@ -401,15 +426,20 @@ function importFontResultsAPI() {
  * Call this from the main onOpen() or separately
  */
 function addFontProcessingMenu() {
-  SpreadsheetApp.getUi()
-    .createMenu('🎨 Font Processing')
-    .addItem('🚀 Categorize New Entries', 'menuFontCategorizeNew')
-    .addItem('🔄 Recategorize All', 'menuFontRecategorizeAll')
-    .addSeparator()
-    .addItem('📥 Import Font Results', 'menuImportFontResults')
-    .addSeparator()
-    .addItem('🗑️ Clear Category Cache', 'menuClearCategoryCache')
-    .addToUi();
+  // 🛡️ SAFE UI: Check if UI is available
+  try {
+    const ui = SpreadsheetApp.getUi();
+    ui.createMenu('🎨 Font Processing')
+      .addItem('🚀 Categorize New Entries', 'menuFontCategorizeNew')
+      .addItem('🔄 Recategorize All', 'menuFontRecategorizeAll')
+      .addSeparator()
+      .addItem('📥 Import Font Results', 'menuImportFontResults')
+      .addSeparator()
+      .addItem('🗑️ Clear Category Cache', 'menuClearCategoryCache')
+      .addToUi();
+  } catch (e) {
+    console.warn('⚠️ Font Menu creation skipped (Headless mode):', e.message);
+  }
 }
 
 function menuFontCategorizeNew() {
@@ -417,15 +447,20 @@ function menuFontCategorizeNew() {
 }
 
 function menuFontRecategorizeAll() {
-  const ui = SpreadsheetApp.getUi();
-  const response = ui.alert(
-    '⚠️ Confirm Full Recategorization',
-    'This will reprocess ALL rows. Continue?',
-    ui.ButtonSet.YES_NO
-  );
-  
-  if (response === ui.Button.YES) {
-    triggerFontCategorizationAPI(true);
+  try {
+      const ui = SpreadsheetApp.getUi();
+      const response = ui.alert(
+        '⚠️ Confirm Full Recategorization',
+        'This will reprocess ALL rows. Continue?',
+        ui.ButtonSet.YES_NO
+      );
+      
+      if (response === ui.Button.YES) {
+        triggerFontCategorizationAPI(true);
+      }
+  } catch (e) {
+      console.log('Running full recategorization (headless mode assumption)');
+      triggerFontCategorizationAPI(true);
   }
 }
 
@@ -434,10 +469,18 @@ function menuImportFontResults() {
 }
 
 function menuClearCategoryCache() {
-  const result = clearCategoryCacheAPI();
-  SpreadsheetApp.getUi().alert(
-    result.success ? '✅ Cache Cleared' : '❌ Error',
-    result.message || result.error || 'Done',
-    SpreadsheetApp.getUi().ButtonSet.OK
-  );
+  if (typeof clearCategoryCacheAPI === 'function') {
+      const result = clearCategoryCacheAPI();
+      try {
+          SpreadsheetApp.getUi().alert(
+            result.success ? '✅ Cache Cleared' : '❌ Error',
+            result.message || result.error || 'Done',
+            SpreadsheetApp.getUi().ButtonSet.OK
+          );
+      } catch (e) {
+          console.log(result.success ? '✅ Cache Cleared' : '❌ Error clearing cache');
+      }
+  } else {
+      console.warn('clearCategoryCacheAPI not found');
+  }
 }

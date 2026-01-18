@@ -1,5 +1,5 @@
 /* *********************************** */
-/*        08 Jan 2026, 17:18:20        */
+/* 08 Jan 2026, 17:18:20        */
 /* *********************************** */
 
 /**
@@ -16,9 +16,9 @@
  *
  * IMPORTANT:
  * - This file was REVISED to avoid reserved name collisions:
- *   - onOpen(e)    -> DEBUG_onOpen_(e)
- *   - doGet(e)     -> MASTER_doGet_(e)
- *   - Master onOpen(e) -> MASTER_onOpen_(e)
+ * - onOpen(e)    -> DEBUG_onOpen_(e)
+ * - doGet(e)     -> MASTER_doGet_(e)
+ * - Master onOpen(e) -> MASTER_onOpen_(e)
  * - Your PROJECT keeps ONE real onOpen/doGet in 00_ProjectEntryPoints.gs ✅
  */
 
@@ -208,7 +208,13 @@ const MASTER_CONFIG = {
  */
 function MASTER_onOpen_(e) {
   MASTER_ensureInitialized_({ reason: "onOpen" });
-  MASTER_buildMenu_();
+  
+  // 🛡️ SAFEGUARD: Try to build menu, fail gracefully if headless
+  try {
+    MASTER_buildMenu_();
+  } catch (e) {
+    console.warn('⚠️ Master Menu creation skipped (No UI context):', e.message);
+  }
 }
 
 /**
@@ -222,8 +228,8 @@ function MASTER_doGet_(e) {
 }
 
 /** =======================================================================
- *  INITIALIZATION
- *  ======================================================================= */
+ * INITIALIZATION
+ * ======================================================================= */
 function MASTER_ensureInitialized_(meta) {
   const props = PropertiesService.getDocumentProperties();
   const isInit = props.getProperty("MASTER_INIT_DONE") === "true";
@@ -248,7 +254,11 @@ function MASTER_ensureInitialized_(meta) {
     });
 
     if (MASTER_CONFIG.ENABLE_TOASTS) {
-      SpreadsheetApp.getActive().toast("✅ Master framework initialized!", "Master Automation ✨", 4);
+      try {
+        SpreadsheetApp.getActive().toast("✅ Master framework initialized!", "Master Automation ✨", 4);
+      } catch (uiErr) {
+        console.warn('Toast skipped (headless):', uiErr.message);
+      }
     }
   } catch (err) {
     MASTER_logEvent_({
@@ -265,14 +275,18 @@ function MASTER_ensureInitialized_(meta) {
 
 function MASTER_initManually() {
   MASTER_ensureInitialized_({ reason: "manual" });
-  MASTER_buildMenu_();
+  try {
+    MASTER_buildMenu_();
+  } catch (e) {
+    console.warn('Manual init menu skipped (headless):', e.message);
+  }
 }
 
 /** =======================================================================
- *  MENU SYSTEM
- *  ======================================================================= */
+ * MENU SYSTEM
+ * ======================================================================= */
 function MASTER_buildMenu_() {
-  const ui = SpreadsheetApp.getUi();
+  const ui = SpreadsheetApp.getUi(); // This throws if headless
   const menu = ui.createMenu(`${MASTER_CONFIG.MENU_NAME} ${MASTER_CONFIG.MENU_EMOJI}`);
 
   menu.addItem("🏠 Open Sidebar (Quick Panel)", "MASTER_showSidebar");
@@ -299,8 +313,8 @@ function MASTER_buildMenu_() {
 }
 
 /** =======================================================================
- *  NAVIGATION
- *  ======================================================================= */
+ * NAVIGATION
+ * ======================================================================= */
 function MASTER_openColab() {
   MASTER_openLinkKey_("COLAB", { from: "menu" });
 }
@@ -470,8 +484,8 @@ function MASTER_openUrlDirect_(url, title) {
 }
 
 /** =======================================================================
- *  MULTI-INTERFACE UX SUITE
- *  ======================================================================= */
+ * MULTI-INTERFACE UX SUITE
+ * ======================================================================= */
 
 function MASTER_showSidebar() {
   const perf = MASTER_perfStart_();
@@ -596,8 +610,8 @@ function MASTER_showFolderManagerDialog() {
 }
 
 /** =======================================================================
- *  DASHBOARD
- *  ======================================================================= */
+ * DASHBOARD
+ * ======================================================================= */
 
 function MASTER_ensureDashboardSheet_() {
   const ss = SpreadsheetApp.getActive();
@@ -762,21 +776,26 @@ function MASTER_trimLogsIfNeeded_(sheet) {
 }
 
 /** =======================================================================
- *  TRIGGERS
- *  ======================================================================= */
+ * TRIGGERS
+ * ======================================================================= */
 
 function MASTER_ensureTriggers_() {
   if (!MASTER_CONFIG.LOG_INCLUDE_EDIT_EVENTS) return;
 
-  const ss = SpreadsheetApp.getActive();
-  const triggers = ScriptApp.getProjectTriggers();
+  // 🛡️ SAFEGUARD: Try to access triggers, catch permissions/context errors
+  try {
+    const ss = SpreadsheetApp.getActive();
+    const triggers = ScriptApp.getProjectTriggers();
 
-  const hasEdit = triggers.some(t => t.getHandlerFunction() === "MASTER_onEditHandler");
-  if (!hasEdit) {
-    ScriptApp.newTrigger("MASTER_onEditHandler")
-      .forSpreadsheet(ss)
-      .onEdit()
-      .create();
+    const hasEdit = triggers.some(t => t.getHandlerFunction() === "MASTER_onEditHandler");
+    if (!hasEdit) {
+      ScriptApp.newTrigger("MASTER_onEditHandler")
+        .forSpreadsheet(ss)
+        .onEdit()
+        .create();
+    }
+  } catch (e) {
+    console.warn('MASTER_ensureTriggers_ skipped (Permissions or Context):', e.message);
   }
 }
 
@@ -812,8 +831,8 @@ function MASTER_onEditHandler(e) {
 }
 
 /** =======================================================================
- *  LINK STORAGE + API
- *  ======================================================================= */
+ * LINK STORAGE + API
+ * ======================================================================= */
 
 function MASTER_getLink_(key) {
   const props = PropertiesService.getDocumentProperties();
@@ -838,7 +857,9 @@ function MASTER_setLink_(key, url) {
     });
 
     if (MASTER_CONFIG.ENABLE_TOASTS) {
-      SpreadsheetApp.getActive().toast(`✅ Saved link for ${cleanKey}`, "Link Manager 🔗", 3);
+      try {
+        SpreadsheetApp.getActive().toast(`✅ Saved link for ${cleanKey}`, "Link Manager 🔗", 3);
+      } catch (uiErr) {}
     }
 
     return { ok: true };
@@ -869,7 +890,9 @@ function MASTER_resetLinks() {
     });
 
     if (MASTER_CONFIG.ENABLE_TOASTS) {
-      SpreadsheetApp.getActive().toast("🔄 Links reset to blank defaults", "Link Manager 🔗", 3);
+      try {
+        SpreadsheetApp.getActive().toast("🔄 Links reset to blank defaults", "Link Manager 🔗", 3);
+      } catch (uiErr) {}
     }
   } catch (err) {
     MASTER_logEvent_({
@@ -901,8 +924,8 @@ function MASTER_apiSetLink(payload) {
 }
 
 /** =======================================================================
- *  FOLDER MANAGEMENT
- *  ======================================================================= */
+ * FOLDER MANAGEMENT
+ * ======================================================================= */
 
 function MASTER_createProjectFolder() {
   const perf = MASTER_perfStart_();
@@ -934,7 +957,9 @@ function MASTER_createProjectFolder() {
     });
 
     if (MASTER_CONFIG.ENABLE_TOASTS) {
-      SpreadsheetApp.getActive().toast("✅ Project folder created in Drive!", "Folder Manager 🗂️", 4);
+      try {
+        SpreadsheetApp.getActive().toast("✅ Project folder created in Drive!", "Folder Manager 🗂️", 4);
+      } catch (uiErr) {}
     }
 
     return { ok: true, folderId: projectFolder.getId(), folderUrl: projectFolder.getUrl() };
@@ -991,8 +1016,8 @@ function MASTER_openProjectFolder() {
 }
 
 /** =======================================================================
- *  HTML BUILDERS
- *  ======================================================================= */
+ * HTML BUILDERS
+ * ======================================================================= */
 
 function MASTER_htmlWebApp_() {
   const t = MASTER_configForUi_();
@@ -1165,8 +1190,8 @@ function MASTER_uiSectionAbout_() {
 }
 
 /** =======================================================================
- *  RECENT LOGS API
- *  ======================================================================= */
+ * RECENT LOGS API
+ * ======================================================================= */
 
 function MASTER_apiGetRecentLogs(limit) {
   const sheet = SpreadsheetApp.getActive().getSheetByName(MASTER_CONFIG.DASHBOARD_SHEET_NAME);
@@ -1194,8 +1219,8 @@ function MASTER_apiGetRecentLogs(limit) {
 }
 
 /** =======================================================================
- *  UTILITIES
- *  ======================================================================= */
+ * UTILITIES
+ * ======================================================================= */
 
 function MASTER_perfStart_() { return { t0: Date.now() }; }
 function MASTER_perfEnd_(perf) { return Math.max(0, Date.now() - (perf && perf.t0 ? perf.t0 : Date.now())); }
@@ -1228,8 +1253,8 @@ function MASTER_escapeHtml_(s) {
 }
 
 /** =======================================================================
- *  HOST INTEGRATION HELPERS
- *  ======================================================================= */
+ * HOST INTEGRATION HELPERS
+ * ======================================================================= */
 
 function MASTER_hostOnOpen_(e) {
   try { MASTER_onOpen_(e); } catch (err) { try { console.error("MASTER_hostOnOpen_ error:", err && err.stack ? err.stack : err); } catch (e2) {} }

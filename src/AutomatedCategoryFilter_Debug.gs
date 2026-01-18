@@ -1,15 +1,12 @@
 /**
  * Automated Category Filter System v2.0 (Debug/Reference Version)
- * 
- * ⚠️ WARNING: This is the ORIGINAL v2.0 code preserved for debugging reference.
+ * * ⚠️ WARNING: This is the ORIGINAL v2.0 code preserved for debugging reference.
  * Contains known issues that are FIXED in AutomatedCategoryFilter.gs v2.1:
  * - Line ~150: References undefined `CFG` variable (causes ReferenceError)
  * - Uses hardcoded column letters instead of dynamic header lookup
  * - Missing input normalization and pagination guards
- * 
- * DO NOT USE IN PRODUCTION - Use AutomatedCategoryFilter.gs instead.
- * 
- * @author G.A.S Text Expander Manager Team
+ * * DO NOT USE IN PRODUCTION - Use AutomatedCategoryFilter.gs instead.
+ * * @author G.A.S Text Expander Manager Team
  * @version 2.0-debug
  * @since 2025-12-30
  * @deprecated Use AutomatedCategoryFilter.gs v2.1 instead
@@ -51,8 +48,7 @@ class CategoryFilterErrorDebug extends Error {
 
 /**
  * Main Category Filter Manager Class (DEBUG VERSION)
- * 
- * Handles all filtering operations using automated Python-generated categories.
+ * * Handles all filtering operations using automated Python-generated categories.
  */
 class CategoryFilterManagerDebug {
   
@@ -64,8 +60,7 @@ class CategoryFilterManagerDebug {
   
   /**
    * Get all unique categories from Main_Category column
-   * 
-   * @returns {Array<string>} List of unique main categories
+   * * @returns {Array<string>} List of unique main categories
    */
   getMainCategories() {
     try {
@@ -118,8 +113,7 @@ class CategoryFilterManagerDebug {
   
   /**
    * Get subcategories for a specific main category
-   * 
-   * @param {string} mainCategory - The main category to filter by
+   * * @param {string} mainCategory - The main category to filter by
    * @returns {Array<string>} List of subcategories
    */
   getSubcategories(mainCategory) {
@@ -172,8 +166,7 @@ class CategoryFilterManagerDebug {
   
   /**
    * Filter text expanders by category and optional subcategory
-   * 
-   * @param {string} mainCategory - Main category to filter by
+   * * @param {string} mainCategory - Main category to filter by
    * @param {string} subcategory - Optional subcategory filter
    * @param {number} page - Page number for pagination (1-based)
    * @returns {Object} Filtered results with pagination info
@@ -307,8 +300,7 @@ class CategoryFilterManagerDebug {
 
 /**
  * Simple session logger for debugging (DEBUG VERSION)
- * 
- * ⚠️ BUG: This version references undefined `CFG` variable!
+ * * ⚠️ BUG: This version references undefined `CFG` variable!
  * The production version (v2.1) uses CATEGORY_FILTER_CONFIG.DEBUG_MODE instead.
  */
 class CategorySessionLoggerDebug {
@@ -377,8 +369,7 @@ function getMainCategoriesAPI_Debug() {
 
 /**
  * DEBUG: Get subcategories for a main category
- * 
- * @param {string} mainCategory - Main category
+ * * @param {string} mainCategory - Main category
  */
 function getSubcategoriesAPI_Debug(mainCategory) {
   try {
@@ -401,8 +392,7 @@ function getSubcategoriesAPI_Debug(mainCategory) {
 
 /**
  * DEBUG: Filter text expanders by category
- * 
- * @param {string} mainCategory - Main category to filter
+ * * @param {string} mainCategory - Main category to filter
  * @param {string} subcategory - Optional subcategory
  * @param {number} page - Page number (default 1)
  */

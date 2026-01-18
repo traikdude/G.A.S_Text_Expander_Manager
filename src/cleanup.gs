@@ -21,6 +21,11 @@ function cleanupDuplicateFavorites() {
 
   try {
     // ✅ Data ops happen inside favorites.gs and its own locking logic
+    // Ensure favorites.gs is loaded or this function exists
+    if (typeof cleanupDuplicateFavorites_ !== 'function') {
+        throw new Error('favorites.gs not loaded or cleanupDuplicateFavorites_ missing');
+    }
+    
     report = cleanupDuplicateFavorites_();
 
     msg = report.removedCount > 0
@@ -58,9 +63,21 @@ function runManualCleanup() {
  * Utility to verify column mapping for Favorites.
  */
 function debugFavoritesColumns() {
-  const sheet = getSheet_(CFG.SHEET_FAVORITES);
+  // Ensure we have access to shared configuration or define defaults
+  const sheetName = (typeof CFG !== 'undefined' && CFG.SHEET_FAVORITES) ? CFG.SHEET_FAVORITES : 'Favorites';
+  
+  const sheet = getSheet_(sheetName);
+  if (!sheet) {
+      notifyUser_('❌ Error', `Sheet "${sheetName}" not found.`);
+      return;
+  }
+  
   const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const colMap = getFavoritesColumnMap_(header);
+  
+  // Use function from favorites.gs if available, or local helper
+  const colMap = (typeof getFavoritesColumnMap_ === 'function') 
+    ? getFavoritesColumnMap_(header) 
+    : indexHeader_(header);
 
   console.log('Current Headers:', header);
   console.log('Mapped Indices:', colMap);
@@ -85,9 +102,9 @@ function debugFavoritesColumns() {
  * ✅ Revised: Releases lock BEFORE any UI dialogs. 🔒🚫
  *
  * @param {Object=} options - Optional { dryRun:boolean, keyMode:string }
- *   keyMode:
- *     - 'snippet' (default): uniqueness by Snippet Name
- *     - 'snippet|application|language': stricter uniqueness
+ * keyMode:
+ * - 'snippet' (default): uniqueness by Snippet Name
+ * - 'snippet|application|language': stricter uniqueness
  *
  * @return {Object} Report { initialCount, removedCount, finalCount, duplicateKeys }
  */
@@ -103,7 +120,13 @@ function cleanupDuplicateShortcuts(options) {
   try {
     lock.waitLock(30000);
 
-    const sheet = getSheet_(CFG.SHEET_SHORTCUTS);
+    const sheetName = (typeof CFG !== 'undefined' && CFG.SHEET_SHORTCUTS) ? CFG.SHEET_SHORTCUTS : 'Shortcuts';
+    const sheet = getSheet_(sheetName);
+    
+    if (!sheet) {
+        throw new Error(`Sheet "${sheetName}" not found.`);
+    }
+    
     const lastRow = sheet.getLastRow();
     const lastCol = sheet.getLastColumn();
 
@@ -121,11 +144,15 @@ function cleanupDuplicateShortcuts(options) {
 
     // Validate required headers exist ✅
     const colMap = indexHeader_(header);
-    if (colMap['Snippet Name'] === undefined || colMap['Content'] === undefined) {
+    // Flexible validation - check for common variations if exact names differ
+    const snIdx = colMap['Snippet Name'] !== undefined ? colMap['Snippet Name'] : colMap['Snippet'];
+    const ctIdx = colMap['Content'] !== undefined ? colMap['Content'] : colMap['Expansion'];
+    
+    if (snIdx === undefined || ctIdx === undefined) {
       throw new Error('Shortcuts sheet is missing required headers (Snippet Name / Content).');
     }
 
-    const keyColIdx = colMap['Snippet Name'];
+    const keyColIdx = snIdx;
     const appColIdx = colMap['Application']; // may be undefined
     const langColIdx = colMap['Language'];   // may be undefined
 
@@ -181,8 +208,8 @@ function cleanupDuplicateShortcuts(options) {
 
     // Invalidate cache after cleanup ✅
     if (removedCount > 0) {
-      try { bumpCacheVersion_(); } catch (e) {}
-      try { invalidateShortcutsCache_(); } catch (e) {}
+      try { if (typeof bumpCacheVersion_ === 'function') bumpCacheVersion_(); } catch (e) {}
+      try { if (typeof invalidateShortcutsCache_ === 'function') invalidateShortcutsCache_(); } catch (e) {}
     }
 
     msg = removedCount > 0
@@ -203,7 +230,7 @@ function cleanupDuplicateShortcuts(options) {
 
   } finally {
     // ✅ ALWAYS release lock ASAP 🔒
-    lock.releaseLock();
+    try { lock.releaseLock(); } catch(e) {}
   }
 }
 
@@ -264,6 +291,25 @@ function notifyUser_(title, message) {
   } catch (e) {
     console.log(`(UI skipped) ${title}: ${message}`);
   }
+}
+
+/**
+ * Helper to get a sheet by name safely
+ */
+function getSheet_(name) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  return ss.getSheetByName(name);
+}
+
+/**
+ * Helper to map headers to column indices (0-based)
+ */
+function indexHeader_(headerRow) {
+  const map = {};
+  headerRow.forEach((h, i) => {
+    if (h) map[String(h)] = i;
+  });
+  return map;
 }
 
 /**

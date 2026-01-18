@@ -4,7 +4,7 @@
 ║ Fixes:                                                                        ║
 ║ 1) Lock pattern: waitLock inside try/finally 🔒                               ║
 ║ 2) handleClipboardFavorite checks backend response 🎯                         ║
-║ 3) Snapshot mappings include new dropdown fields 🏷️                          ║
+║ 3) Snapshot mappings include new dropdown fields 🏷️                           ║
 ║ 4) Added mapFontStyleToStyleToken_ helper 🎨                                  ║
 ║ 5) Fixed bulkImport updated/inserted counts 📊                                ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
@@ -93,8 +93,8 @@ function getAppBootstrapData() {
  */
 function beginShortcutsSnapshotHandler() {
   try {
-    const meta = beginShortcutsSnapshot();
-    const batch = fetchSnapshotPage_(meta.snapshotToken, 0, CFG.INITIAL_PAGE_SIZE);
+    const meta = beginShortcutsSnapshotWithFallback();
+    const batch = fetchSnapshotPageWithFallback_(meta.snapshotToken, 0, CFG.INITIAL_PAGE_SIZE);
     
     if (batch.error) throw new Error(batch.error);
 
@@ -152,7 +152,7 @@ function fetchShortcutsBatch(snapshotToken, offset, limit) {
   try {
     if (!snapshotToken) return { ok: false, message: 'Missing snapshot token' };
 
-    const batch = fetchSnapshotPage_(snapshotToken, offset, limit);
+    const batch = fetchSnapshotPageWithFallback_(snapshotToken, offset, limit);
     
     if (batch.error === 'SNAPSHOT_EXPIRED') {
       return { ok: false, error: 'SNAPSHOT_EXPIRED', message: 'Snapshot expired. Reloading...' };
@@ -224,6 +224,7 @@ function upsertShortcut(payload) {
     if (!v.ok) return v;
 
     const sheet = getSheet_(CFG.SHEET_SHORTCUTS);
+    // Use helper from Code.gs if available, or define local
     const { header, col } = getShortcutsHeaderAndColMap_(sheet);
     const width = header.length;
 
@@ -525,17 +526,107 @@ function invalidateShortcutsCache() {
   }
 }
 
-/*
-╔═══════════════════════════════════════════════════════════════════════════════╗
-║ END OF PART 2                                                                 ║
-║ Next: Part 3 will provide the cleanup.gs script.                              ║
-║ Progress: ██████████░ 66%                                                     ║
-╚═══════════════════════════════════════════════════════════════════════════════╝
-🎯 WHAT'S NEXT:
-Reply "CONTINUE" for Part 3.
-🚀 YOUR 4 NAVIGATION OPTIONS:
-1️⃣ CONTINUE → Proceed to Part 3 (cleanup.gs)
-2️⃣ REVIEW → Validate changes in uiHandlers.gs
-3️⃣ MODIFY → Request changes to UI handlers
-4️⃣ EXPLAIN → How deletion is delegated
-*/
+// ============================================================================
+// HELPER FUNCTIONS (Internal)
+// ============================================================================
+
+/**
+ * Helper to get column mapping for shortcuts sheet.
+ */
+function getShortcutsHeaderAndColMap_(sheet) {
+  const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const idx = indexHeader_(header);
+  
+  return {
+    header: header,
+    col: {
+      key: idx['Snippet Name'],
+      expansion: idx['Content'],
+      application: idx['Application'],
+      description: idx['Description'],
+      language: idx['Language'],
+      tags: idx['Tags'],
+      updatedAt: idx['UpdatedAt']
+    }
+  };
+}
+
+/**
+ * Helper to get all values from a column.
+ */
+function getColumnValues_(sheet, colIndex) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  return sheet.getRange(2, colIndex + 1, lastRow - 1, 1).getValues().map(r => r[0]);
+}
+
+/**
+ * Helper to find all row indices matching a key.
+ */
+function findAllRowsByKey_(allKeys, key) {
+  const rows = [];
+  for (let i = 0; i < allKeys.length; i++) {
+    if (String(allKeys[i]).trim() === key) {
+      rows.push(i + 2); // 1-based index, +1 for header
+    }
+  }
+  return rows;
+}
+
+/**
+ * Helper to parse CSV for import.
+ */
+function parseImportCsv_(text, defaultApp, defaultLang) {
+  try {
+    const rows = Utilities.parseCsv(text);
+    if (rows.length === 0) return { ok: true, rows: [] };
+    
+    // Assume headerless if first row looks like data, otherwise skip header
+    // Simple heuristic: if 'Snippet Name' or 'Content' in first row, skip it
+    let startRow = 0;
+    if (rows[0][0].toLowerCase().includes('snippet') || rows[0][1].toLowerCase().includes('content')) {
+      startRow = 1;
+    }
+    
+    const result = [];
+    for (let i = startRow; i < rows.length; i++) {
+      const r = rows[i];
+      if (r.length < 2) continue;
+      
+      result.push({
+        key: r[0],
+        expansion: r[1],
+        application: r[2] || defaultApp,
+        description: r[3] || '',
+        language: r[4] || defaultLang,
+        tags: r[5] || ''
+      });
+    }
+    return { ok: true, rows: result };
+  } catch (e) {
+    return { ok: false, message: 'CSV parse error: ' + e.message };
+  }
+}
+
+/**
+ * Helper to parse JSON for import.
+ */
+function parseImportJson_(text, defaultApp, defaultLang) {
+  try {
+    const data = JSON.parse(text);
+    if (!Array.isArray(data)) return { ok: false, message: 'JSON must be an array of objects.' };
+    
+    const result = data.map(item => ({
+      key: item.key || item.snippet || '',
+      expansion: item.expansion || item.content || '',
+      application: item.application || defaultApp,
+      description: item.description || '',
+      language: item.language || defaultLang,
+      tags: item.tags || ''
+    }));
+    
+    return { ok: true, rows: result };
+  } catch (e) {
+    return { ok: false, message: 'JSON parse error: ' + e.message };
+  }
+}
