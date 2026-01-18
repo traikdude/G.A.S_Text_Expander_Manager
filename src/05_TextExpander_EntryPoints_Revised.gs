@@ -58,6 +58,7 @@ function TEM_onOpen_(e) {
 
 function TEM_doGet_(e) {
   ensureSheets_();
+  // ✅ FIXED: Return HTML with ALLOWALL permissons for Google Sites embedding
   return HtmlService.createTemplateFromFile('Index')
     .evaluate()
     .setTitle('Text Expansion Manager')
